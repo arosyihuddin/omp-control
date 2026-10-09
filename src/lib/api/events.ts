@@ -1,3 +1,5 @@
+import { runtimeUrl } from "./runtime-url";
+
 /**
  * One shared EventSource for the whole app.
  *
@@ -12,20 +14,29 @@ const attached = new Set<string>();
 let source: EventSource | null = null;
 let subscribers = 0;
 
+function attachSource() {
+  if (source || subscribers === 0) return;
+  source = new EventSource(runtimeUrl('/api/events'));
+  for (const type of handlers.keys()) {
+    source?.addEventListener(type, dispatcher(type));
+    attached.add(type);
+  }
+}
+
 function dispatcher(type: string): Handler {
   return (event) => handlers.get(type)?.forEach((handler) => handler(event));
 }
 
 export function onServerEvent(type: string, handler: Handler): () => void {
-  source ??= new EventSource('/api/events');
   subscribers += 1;
+  attachSource();
 
   let set = handlers.get(type);
   if (!set) handlers.set(type, (set = new Set()));
   set.add(handler);
 
   if (!attached.has(type)) {
-    source.addEventListener(type, dispatcher(type));
+    source?.addEventListener(type, dispatcher(type));
     attached.add(type);
   }
 
@@ -48,4 +59,13 @@ export function onServerEvent(type: string, handler: Handler): () => void {
 export function onServerEvents(types: string[], handler: Handler): () => void {
   const cleanups = types.map((type) => onServerEvent(type, handler));
   return () => cleanups.forEach((cleanup) => cleanup());
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("omp-control:instance-change", () => {
+    source?.close();
+    source = null;
+    attached.clear();
+    attachSource();
+  });
 }

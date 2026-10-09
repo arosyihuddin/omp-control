@@ -66,3 +66,31 @@
     @apply text-xs font-medium uppercase tracking-wider text-fg-faint;
   }
 }
+
+
+/* Theme changes ripple outward from the theme toggle button. */
+::view-transition-old(root) {
+  animation: none;
+  z-index: 0;
+}
+
+::view-transition-new(root) {
+  z-index: 1;
+  animation: theme-water-ripple 1400ms cubic-bezier(0.25, 0.1, 0.25, 1) both;
+  will-change: clip-path;
+}
+
+@keyframes theme-water-ripple {
+  from {
+    clip-path: circle(0 at var(--theme-ripple-x, 50vw) var(--theme-ripple-y, 50vh));
+  }
+  to {
+    clip-path: circle(var(--theme-ripple-radius, 150vmax) at var(--theme-ripple-x, 50vw) var(--theme-ripple-y, 50vh));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-new(root) {
+    animation: none;
+  }
+}

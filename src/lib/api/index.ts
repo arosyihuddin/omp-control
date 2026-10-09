@@ -16,6 +16,7 @@ import type {
   WorkspaceItem,
 } from '$lib/types';
 import { postJson, request } from './http';
+import { runtimeUrl } from './runtime-url';
 
 export { errorMessage } from './http';
 
@@ -56,8 +57,7 @@ export const terminalsApi = {
   list: async () => (await request<{ terminals: TerminalInfo[] }>('/api/terminals')).terminals ?? [],
   create: async () => (await postJson<{ terminal: TerminalInfo }>('/api/terminals', {})).terminal,
   close: (id: string) => request(`/api/terminals/${enc(id)}`, { method: 'DELETE' }),
-  socketUrl: (id: string) =>
-    `${location.protocol === 'https:' ? 'wss://' : 'ws://'}${location.host}/api/terminal/socket?id=${enc(id)}`,
+  socketUrl: (id: string) => (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + runtimeUrl('/api/terminal/socket?id=' + enc(id)),
 };
 
 export const workspaceApi = {
@@ -71,13 +71,13 @@ export const workspaceApi = {
       headers: { 'content-type': 'text/plain; charset=utf-8' },
       body: content,
     }),
-  previewUrl: (path: string) => `/api/workspace/preview?path=${enc(path)}`,
+  previewUrl: (path: string) => runtimeUrl('/api/workspace/preview?path=' + enc(path)),
   create: (path: string, type: 'file' | 'directory') => postJson<{ path: string }>('/api/workspace/create', { path, type }),
   rename: (path: string, newName: string) => postJson<{ path: string; name: string }>('/api/workspace/rename', { path, newName }),
   duplicate: (path: string) => postJson<{ path: string; name: string }>('/api/workspace/duplicate', { path }),
   move: (path: string, destDir: string) => postJson<{ path: string }>('/api/workspace/move', { path, destDir }),
   stat: (path: string) => request<WorkspaceStat>(`/api/workspace/stat?path=${enc(path)}`),
-  downloadUrl: (path: string) => `/api/workspace/download?path=${enc(path)}`,
+  downloadUrl: (path: string) => runtimeUrl('/api/workspace/download?path=' + enc(path)),
 };
 
 export const profileApi = {

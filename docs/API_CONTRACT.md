@@ -1,6 +1,6 @@
 # OMP Control API contract (draft v1)
 
-This contract describes the control-plane API. It is a proposal for implementation, not a claim that these endpoints already exist.
+This contract describes the control-plane API. Registry CRUD and health-check endpoints are implemented in the current foundation; authentication and per-user server-side active-instance preferences remain planned. The current browser stores its active instance locally, and the runtime proxy uses an explicit route/method allowlist.
 
 Base path: /control/v1
 
@@ -73,10 +73,10 @@ Response fields: status, checkedAt, latencyMs, optional runtimeVersion. Health c
 ### Active instance
 Active instance is initially a client preference. Persist it per user once authentication is implemented. Every instance-scoped operation must include an explicit instanceId in the control-plane route or request context.
 
-### Proxy runtime APIs (planned)
+### Proxy runtime APIs
 /control/v1/instances/{instanceId}/runtime/{path}
 
-This is a planned server-side proxy for supported runtime operations. Implement an explicit allowlist of paths/methods; do not create an unrestricted generic proxy. WebSocket and SSE forwarding need separate protocol-aware handling.
+Implemented as an explicit allowlist for supported REST endpoints and SSE forwarding. Terminal WebSocket forwarding is supported for instances without a bearer credential; authenticated WebSocket forwarding remains a limitation. No unrestricted generic proxy is exposed.
 
 ## Rollout sequence
 

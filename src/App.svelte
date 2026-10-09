@@ -4,6 +4,7 @@
   import Sidebar from '$lib/components/layout/Sidebar.svelte';
   import Topbar from '$lib/components/layout/Topbar.svelte';
   import { dashboard } from '$lib/stores/dashboard.svelte';
+  import { instanceRegistry } from '$lib/stores/instances.svelte';
   import { profile } from '$lib/stores/profile.svelte';
   import { router } from '$lib/stores/router.svelte';
   import { theme } from '$lib/stores/theme.svelte';
@@ -27,12 +28,19 @@
     const stopRouter = router.init();
     theme.init();
     const stopEvents = dashboard.connect();
-    void dashboard.refresh();
-    void prefs.init();
-    void profile.load();
+    const onInstanceChange = () => {
+      void dashboard.refresh();
+      void profile.load();
+      void prefs.reload();
+    };
+    window.addEventListener('omp-control:instance-change', onInstanceChange);
+    void instanceRegistry.load().then(async () => {
+      await Promise.all([dashboard.refresh(), prefs.init(), profile.load()]);
+    });
     return () => {
       stopRouter();
       stopEvents();
+      window.removeEventListener('omp-control:instance-change', onInstanceChange);
     };
   });
 
@@ -51,13 +59,13 @@
 {/snippet}
 
 <AppShell
-  fill={router.current === 'terminal' || router.current === 'workspace-files' || router.current === 'workspace-editor'}
-  {sidebar}
-  {header}
->
-  {#if router.current === 'overview'}
-    <Overview />
-  {:else if router.current === 'tools'}
+    fill={router.current === 'terminal' || router.current === 'workspace-files' || router.current === 'workspace-editor'}
+    {sidebar}
+    {header}
+  >
+    {#if router.current === 'overview'}
+      <Overview />
+    {:else if router.current === 'tools'}
     <Tools />
   {:else if router.current === 'approvals'}
     <Approvals />
@@ -73,5 +81,5 @@
     <FavoritesView />
   {:else if router.inWorkspace}
     <EditorView />
-  {/if}
-</AppShell>
+    {/if}
+  </AppShell>

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Code2, FilePlus2, FolderOpen, ChevronRight, RefreshCw, Save, X, Circle, File, PanelLeft, Check, AlertCircle, Home, Maximize2, Minimize2, Search, Command } from '@lucide/svelte';
+  import { Code2, FilePlus2, FolderOpen, ChevronRight, RefreshCw, Save, X, Circle, File, PanelLeft, Check, AlertCircle, Home, Maximize2, Minimize2, Search, Command, FolderX, Terminal as TerminalIcon, Plus } from '@lucide/svelte';
   import { Button, IconButton, Modal, EmptyState } from '$lib/components/ui';
   import { basename, displayPath, joinPath, isHidden } from './file-utils';
   import EditorTreeItem from './EditorTreeItem.svelte';
@@ -8,11 +8,13 @@
   import CodeEditor from './CodeEditor.svelte';
   import { editor } from './editor.svelte';
   import { onMount } from 'svelte';
+  import { TerminalController, TerminalSessions, TerminalViewport } from '$features/terminal';
 
   let pickerOpen = $state(false);
   let commandOpen = $state(false);
   let pickerMode = $state<'file' | 'directory'>('file');
   let closeTarget = $state<string | null>(null);
+  let closeProjectOpen = $state(false);
   let showTree = $state(true);
   let fullscreen = $state(false);
   let sidebarWidth = $state(224);
@@ -21,6 +23,10 @@
   let resizeStartWidth = 224;
   let showHidden = $state(true);
   let filter = $state('');
+  let terminalOpen = $state(false);
+  let terminalSessionsOpen = $state(true);
+  const terminalController = new TerminalController();
+  let terminalViewport = $state<ReturnType<typeof TerminalViewport>>();
 
   const visibleItems = $derived(editor.items
     .filter((item) => (showHidden || !isHidden(item.name)) && item.name.toLowerCase().includes(filter.trim().toLowerCase()))
@@ -35,6 +41,13 @@
     }
   });
   onMount(() => {
+    terminalController.attach({ write: (data) => terminalViewport?.write(data), reset: () => terminalViewport?.reset(), focus: () => terminalViewport?.focus(), refit: () => terminalViewport?.refit() });
+    void terminalController.init();
+    return () => terminalController.dispose();
+  });
+
+  onMount(() => {
+    // Restore the project and its open tabs after a page refresh.
     if (!editor.root && editor.tabs.length === 0) void editor.restoreLastSession();
   });
 
@@ -95,6 +108,28 @@
     else await editor.openFile(path);
   }
 
+  function requestCloseProject() {
+    if (editor.dirty) {
+      closeProjectOpen = true;
+      return;
+    }
+    editor.closeProject();
+    filter = '';
+    showTree = true;
+  }
+
+  async function confirmCloseProject(choice: 'save' | 'discard' | 'cancel') {
+    closeProjectOpen = false;
+    if (choice === 'cancel') return;
+    if (choice === 'save') {
+      await editor.saveAll();
+      if (editor.dirty) return;
+    }
+    editor.closeProject();
+    filter = '';
+    showTree = true;
+  }
+
   function closeRequest(path: string) {
     const tab = editor.tabs.find((item) => item.path === path);
     if (tab && tab.content !== tab.saved) {
@@ -116,7 +151,13 @@
 
   function keydown(event: KeyboardEvent) {
     const mod = event.metaKey || event.ctrlKey;
-    if (mod && event.key.toLowerCase() === 's') {
+    if (mod && event.code === 'Backquote' && !event.shiftKey) {
+      event.preventDefault();
+      terminalOpen = !terminalOpen;
+      if (terminalOpen) requestAnimationFrame(() => terminalViewport?.focus());
+    } else if (mod && event.shiftKey && event.code === 'Backquote') {
+      event.preventDefault(); terminalOpen = true; void terminalController.create(); requestAnimationFrame(() => terminalViewport?.focus());
+    } else if (mod && event.key.toLowerCase() === 's') {
       event.preventDefault();
       if (event.shiftKey) void editor.saveAll();
       else void editor.save();
@@ -155,17 +196,22 @@
       <span class="flex items-center gap-0.5 text-[10px] text-fg-faint"><Command size={10} /> P</span>
     </button>
     <div class="flex shrink-0 items-center gap-0.5">
-      <IconButton label="Open file" size="sm" onclick={() => openPicker('file')}><FilePlus2 size={15} /></IconButton>
-      <IconButton label="Open folder" size="sm" onclick={() => openPicker('directory')}><FolderOpen size={15} /></IconButton>
-      <IconButton label="Refresh folder" size="sm" disabled={!editor.root || editor.treeLoading} onclick={() => void editor.loadDir(editor.dir)}><RefreshCw size={14} /></IconButton>
+      {#if editor.root}
+        <IconButton label="Open file" size="sm" onclick={() => openPicker('file')}><FilePlus2 size={15} /></IconButton>
+        <IconButton label="Close project" size="sm" onclick={requestCloseProject}><FolderX size={15} /></IconButton>
+        <IconButton label="Refresh project files" size="sm" disabled={editor.treeLoading} onclick={() => void editor.loadDir(editor.dir)}><RefreshCw size={14} /></IconButton>
+      {:else}
+        <Button size="sm" variant="secondary" onclick={() => openPicker('directory')}><FolderOpen size={14} /> Open Project</Button>
+      {/if}
       <IconButton label={editor.saving ? 'Saving…' : 'Save'} size="sm" disabled={!editor.activeDirty || editor.saving} onclick={() => void editor.save()}><Save size={15} /></IconButton>
       <div class="mx-1 h-5 w-px bg-line"></div>
+      <IconButton label={terminalOpen ? 'Hide terminal' : 'Show terminal'} size="sm" onclick={() => { terminalOpen = !terminalOpen; if (terminalOpen) requestAnimationFrame(() => terminalViewport?.focus()); }}><TerminalIcon size={15} /></IconButton>
       <IconButton label={fullscreen ? 'Exit fullscreen' : 'Fullscreen'} size="sm" onclick={toggleFullscreen}>{#if fullscreen}<Minimize2 size={15} />{:else}<Maximize2 size={15} />{/if}</IconButton>
     </div>
 
   </div>
   <div class={["flex min-h-0 flex-1", resizingSidebar ? "select-none cursor-col-resize" : ""]}>
-    {#if showTree}
+    {#if editor.root && showTree}
       <aside class="flex shrink-0 flex-col border-r border-line bg-surface text-sm" style={"width: " + sidebarWidth + "px; min-width: 160px; max-width: min(520px, 70vw)"}>
         <div class="flex h-10 items-center justify-between border-b border-line px-3">
           <span class="min-w-0 truncate text-xs font-semibold uppercase tracking-wide text-fg-muted" title={editor.projectLabel}>{editor.root ? editor.projectLabel : 'Explorer'}</span>
@@ -203,7 +249,7 @@
         {/if}
       </aside>
       <div role="separator" aria-orientation="vertical" aria-label="Resize explorer sidebar" title="Drag to resize sidebar (double-click to reset)" class="group relative z-10 -ml-px w-1 shrink-0 cursor-col-resize touch-none bg-transparent hover:bg-accent/50 active:bg-accent/70" onpointerdown={startSidebarResize} ondblclick={() => (sidebarWidth = 224)}><span class="absolute inset-y-0 -left-1 -right-1"></span></div>
-    {:else}
+    {:else if editor.root}
       <div class="flex items-start border-r border-line p-1.5">
         <IconButton label="Show explorer" size="sm" onclick={() => (showTree = true)}><PanelLeft size={15} /></IconButton>
       </div>
@@ -255,20 +301,35 @@
         </div>
       {:else}
         <div class="flex min-h-0 flex-1 items-center justify-center p-6">
-          <EmptyState icon={Code2} title={editor.root ? 'No files open' : 'Welcome to Editor'} description={editor.root ? 'Choose a file from Explorer, or open another file.' : 'Open a folder to browse a project, or open a file directly.'}>
+          <EmptyState icon={Code2} title={editor.root ? 'No files open' : 'No project open'} description={editor.root ? 'Choose a file from the project explorer to start editing.' : 'Open a project folder to show its files and start editing.'}>
             <div class="flex flex-wrap justify-center gap-2">
-              <Button variant="secondary" onclick={() => openPicker('directory')}><FolderOpen size={15} /> Open Folder</Button>
-              <Button variant="primary" onclick={() => openPicker('file')}><FilePlus2 size={15} /> Open File</Button>
+              <Button variant="primary" onclick={() => openPicker('directory')}><FolderOpen size={15} /> Open Project</Button>
+              {#if editor.root}
+                <Button variant="secondary" onclick={() => openPicker('file')}><FilePlus2 size={15} /> Open File</Button>
+              {/if}
             </div>
           </EmptyState>
         </div>
       {/if}
+      <section class={[terminalOpen ? 'flex h-[min(38vh,320px)] min-h-44 border-t' : 'flex h-0 min-h-0 overflow-hidden border-t-0', 'shrink-0 flex-col bg-surface transition-[height] duration-200']}>
+          <header class="flex h-9 shrink-0 items-center justify-between border-b border-line px-2.5"><div class="flex items-center gap-2 text-xs font-medium text-fg-muted"><TerminalIcon size={14} /> Terminal <span class="text-fg-faint">({terminalController.terminals.length})</span></div><div class="flex items-center gap-1"><span class="mr-1 text-[10px] text-fg-faint">{terminalController.socketState === 'connected' ? 'Connected' : terminalController.socketState === 'connecting' ? 'Connecting…' : 'Disconnected'}</span><IconButton label="New terminal" size="sm" disabled={terminalController.creating} onclick={() => void terminalController.create()}><Plus size={14} /></IconButton><IconButton label="Hide terminal" size="sm" onclick={() => (terminalOpen = false)}><X size={14} /></IconButton></div></header>
+          <div class="flex min-h-0 flex-1"><TerminalSessions terminals={terminalController.terminals} activeId={terminalController.activeId} loading={terminalController.loading} open={terminalSessionsOpen} oncreate={() => void terminalController.create()} onopen={(id) => terminalController.open(id)} onclose={(id) => void terminalController.close(id)} ontoggle={() => (terminalSessionsOpen = !terminalSessionsOpen)} /><div class="relative min-w-0 flex-1"><TerminalViewport bind:this={terminalViewport} ondata={terminalController.sendInput} onresize={terminalController.sendResize} />{#if !terminalController.active && !terminalController.loading}<div class="absolute inset-0 flex items-center justify-center bg-surface text-sm text-fg-subtle"><button type="button" class="rounded-md border border-line px-3 py-2 hover:bg-surface-hover" onclick={() => void terminalController.create()}>Create terminal session</button></div>{/if}{#if terminalController.error}<button type="button" class="absolute inset-x-3 bottom-3 rounded-md border border-line bg-surface-raised px-3 py-2 text-left text-xs text-danger shadow-card" onclick={() => (terminalController.error = '')}>{terminalController.error}</button>{/if}</div></div>
+      </section>
     </section>
   </div>
 </div>
 
-<CommandPalette open={commandOpen} root={editor.root || '.'} onclose={() => (commandOpen = false)} onselectfile={(path) => { commandOpen = false; void editor.openFile(path); }} onaction={(action) => { commandOpen = false; if (action === 'open-file') openPicker('file'); else if (action === 'open-folder') openPicker('directory'); else if (action === 'save') void editor.save(); else if (action === 'save-all') void editor.saveAll(); else if (action === 'toggle-explorer') showTree = !showTree; else if (action === 'fullscreen') toggleFullscreen(); else if (action === 'refresh') void editor.loadDir(editor.dir); }} />
+<CommandPalette open={commandOpen} root={editor.root || '.'} onclose={() => (commandOpen = false)} onselectfile={(path) => { commandOpen = false; void editor.openFile(path); }} onaction={(action) => { commandOpen = false; if (action === 'open-file') openPicker('file'); else if (action === 'open-folder') openPicker('directory'); else if (action === 'save') void editor.save(); else if (action === 'save-all') void editor.saveAll(); else if (action === 'toggle-explorer') showTree = !showTree; else if (action === 'fullscreen') toggleFullscreen(); else if (action === 'refresh') void editor.loadDir(editor.dir); else if (action === 'toggle-terminal') { terminalOpen = !terminalOpen; } else if (action === 'new-terminal') { terminalOpen = true; void terminalController.create(); } }} />
 <PathPicker open={pickerOpen} mode={pickerMode} initialPath={editor.root || '.'} onselect={pickPath} oncancel={() => (pickerOpen = false)} />
+
+<Modal open={closeProjectOpen} title="Close project?" width="max-w-md" onclose={() => (closeProjectOpen = false)}>
+  <p class="px-4 py-4 text-sm text-fg-muted">This project has unsaved changes. Save them before closing the project?</p>
+  {#snippet footer()}
+    <Button variant="ghost" onclick={() => void confirmCloseProject('cancel')}>Cancel</Button>
+    <Button variant="secondary" onclick={() => void confirmCloseProject('discard')}>Don't Save</Button>
+    <Button variant="primary" onclick={() => void confirmCloseProject('save')}>Save & Close</Button>
+  {/snippet}
+</Modal>
 
 <Modal open={closeTarget !== null} title="Unsaved changes" width="max-w-md" onclose={() => (closeTarget = null)}>
   <p class="px-4 py-4 text-sm text-fg-muted">Save changes to {editor.tabs.find((tab) => tab.path === closeTarget)?.name ?? 'this file'} before closing?</p>

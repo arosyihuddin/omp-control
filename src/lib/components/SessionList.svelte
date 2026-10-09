@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { runtimeUrl } from "$lib/api/runtime-url";
   import { ChevronDown, ExternalLink, Square, X } from '@lucide/svelte';
   import type { Session } from '../types';
   export let sessions: Session[] = [];
@@ -18,7 +19,7 @@
     actionBusy = `${type}:${session.sessionId}`;
     actionError = '';
     try {
-      const response = await fetch(`/api/sessions/${encodeURIComponent(session.sessionId)}/${type}`, { method: 'POST' });
+      const response = await fetch(runtimeUrl('/api/sessions/' + encodeURIComponent(session.sessionId) + '/' + type), { method: 'POST' });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? `Unable to ${type} session`);
       if (type === 'dispose') expandedId = expandedId === session.sessionId ? '' : expandedId;

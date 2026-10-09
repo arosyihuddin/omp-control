@@ -1,6 +1,7 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import { runtimeUrl } from "$lib/api/runtime-url";
   import {
     ArrowLeft,
     ArrowRight,
@@ -122,7 +123,7 @@
     if (!confirm("Delete " + (item.type === "directory" ? "folder" : "file") + " " + item.name + "?")) return;
     try {
       const query = new URLSearchParams({ path: itemPath });
-      const response = await fetch("/api/workspace?" + query.toString(), { method: "DELETE" });
+      const response = await fetch(runtimeUrl("/api/workspace?" + query.toString()), { method: "DELETE" });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? "Unable to delete item");
       open(path);
@@ -209,7 +210,7 @@
     return Boolean(previewKindFor(name));
   }
   function previewUrl(filePath: string) {
-    return "/api/workspace/preview?path=" + encodeURIComponent(filePath);
+    return runtimeUrl("/api/workspace/preview?path=" + encodeURIComponent(filePath));
   }
   function showPreview(filePath: string, name: string) {
     previewPath = filePath;

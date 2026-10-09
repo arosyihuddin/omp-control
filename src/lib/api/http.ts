@@ -1,3 +1,5 @@
+import { runtimeUrl } from "./runtime-url";
+
 export class ApiError extends Error {
   readonly status: number;
   constructor(message: string, status: number) {
@@ -9,9 +11,14 @@ export class ApiError extends Error {
 
 /** Typed JSON request helper. Throws ApiError using the server-provided message. */
 export async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(url, { cache: 'no-store', ...init });
-  const data = (await response.json().catch(() => ({}))) as { error?: string } & Record<string, unknown>;
-  if (!response.ok) throw new ApiError(data.error ?? `Request failed (${response.status})`, response.status);
+  const response = await fetch(runtimeUrl(url), { cache: 'no-store', ...init });
+  const data = (await response.json().catch(() => ({}))) as { error?: string | { code?: string; message?: string } } & Record<string, unknown>;
+  if (!response.ok) {
+    const message = typeof data.error === "string"
+      ? data.error
+      : data.error?.message ?? `Request failed (${response.status})`;
+    throw new ApiError(message, response.status);
+  }
   return data as T;
 }
 

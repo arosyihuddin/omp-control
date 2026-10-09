@@ -20,11 +20,11 @@
       <h1 class="truncate font-medium text-fg">{router.title}</h1>
     </nav>
   </div>
-  <div class="flex shrink-0 items-center gap-1">
+  <div class="flex shrink-0 items-center gap-2">
     <IconButton label="Refresh" disabled={dashboard.loading} onclick={() => dashboard.refresh()}>
       <RefreshCw size={15} strokeWidth={1.8} class={dashboard.loading ? 'animate-spin' : ''} />
     </IconButton>
-    <IconButton label={theme.current === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} onclick={() => theme.toggle()}>
+    <IconButton label={theme.current === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} onclick={(event) => theme.toggle(event.currentTarget)}>
       {#if theme.current === 'dark'}<Sun size={16} strokeWidth={1.8} />{:else}<Moon size={16} strokeWidth={1.8} />{/if}
     </IconButton>
   </div>

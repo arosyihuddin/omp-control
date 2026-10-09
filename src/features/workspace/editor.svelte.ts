@@ -56,7 +56,6 @@ class EditorStore {
   async openFolder(path: string, name?: string) {
     this.root = path;
     writeString(storageKeys.editorLastRoot, path);
-    writeString(storageKeys.editorLastRoot, path);
     this.dir = path;
     this.error = '';
     prefs.remember(path, name);
@@ -173,14 +172,41 @@ class EditorStore {
     this.scheduleSessionSave();
   }
 
+  closeProject() {
+    const previousRoot = this.root;
+    clearTimeout(this.saveTimer);
+    this.saveTimer = undefined;
+    if (previousRoot) {
+      try {
+        localStorage.removeItem('omp-editor-preview:' + previousRoot);
+        localStorage.removeItem(storageKeys.editorLastRoot);
+      } catch {
+        // Closing the project should still clear the editor if storage is unavailable.
+      }
+      void workspaceStateApi.saveEditorSession(previousRoot, [], null).catch(() => {});
+    }
+    this.root = '';
+    this.dir = '.';
+    this.items = [];
+    this.treeLoading = false;
+    this.tabs = [];
+    this.activePath = '';
+    this.loading = false;
+    this.saving = false;
+    this.error = '';
+    this.sessionRoot = '';
+  }
+
   private scheduleSessionSave() {
-    if (!this.root) return;
+    const root = this.root;
+    if (!root) return;
+    const tabs = this.tabs.map((tab) => tab.path);
+    const activePath = this.activePath || null;
+    const previewPath = this.tabs.find((tab) => tab.preview)?.path ?? '';
     clearTimeout(this.saveTimer);
     this.saveTimer = setTimeout(() => {
-      const previewTab = this.tabs.find((tab) => tab.preview);
-      if (previewTab) writeString('omp-editor-preview:' + this.root, previewTab.path);
-      else writeString('omp-editor-preview:' + this.root, '');
-      void workspaceStateApi.saveEditorSession(this.root, this.tabs.map((tab) => tab.path), this.activePath || null).catch(() => {});
+      writeString('omp-editor-preview:' + root, previewPath);
+      void workspaceStateApi.saveEditorSession(root, tabs, activePath).catch(() => {});
     }, 500);
   }
 }

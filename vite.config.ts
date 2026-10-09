@@ -6,7 +6,7 @@ const envDir = fileURLToPath(new URL(".", import.meta.url));
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, envDir, "");
-  const backend = env.OMP_MCP_BACKEND ?? "http://127.0.0.1:48765";
+  const backend = env.OMP_MCP_BACKEND ?? "http://127.0.0.1:48766";
 
 // https://vite.dev/config/
 return {
@@ -21,6 +21,7 @@ return {
   server: {
     proxy: {
       "/api": { target: backend, changeOrigin: true, ws: true },
+      "/control": { target: env.OMP_CONTROL_API ?? "http://127.0.0.1:48767", changeOrigin: true, ws: true },
     },
   },
   };
