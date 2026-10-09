@@ -1,4 +1,5 @@
 import { errorMessage, terminalsApi } from '$lib/api';
+import type { TerminalScope } from '$lib/api';
 import type { TerminalInfo } from '$lib/types';
 import { readString, storageKeys, writeString } from '$lib/utils/storage';
 
@@ -21,7 +22,12 @@ interface ServerMessage {
   message?: string;
 }
 
-/** Owns the terminal list and the WebSocket bridge to the active PTY session. */
+interface TerminalControllerOptions {
+  scope?: TerminalScope;
+  getWorkspaceRoot?: () => string;
+}
+
+/** Owns one logical terminal group and its WebSocket bridge to the active PTY session. */
 export class TerminalController {
   terminals = $state<TerminalInfo[]>([]);
   activeId = $state('');
@@ -35,35 +41,81 @@ export class TerminalController {
   private socket: WebSocket | null = null;
   private view: TerminalViewHandle | null = null;
   private lastResize = '';
+  private readonly scope: TerminalScope;
+  private readonly getWorkspaceRoot: () => string;
+  private currentWorkspaceRoot = '';
+  private loadGeneration = 0;
+
+  constructor(options: TerminalControllerOptions = {}) {
+    this.scope = options.scope ?? 'general';
+    this.getWorkspaceRoot = options.getWorkspaceRoot ?? (() => '');
+    this.currentWorkspaceRoot = this.getWorkspaceRoot();
+  }
+
+  private get storageKey() {
+    return this.scope === 'general'
+      ? storageKeys.terminalActiveId
+      : `${storageKeys.terminalActiveId}:project:${this.currentWorkspaceRoot}`;
+  }
 
   attach(view: TerminalViewHandle) {
     this.view = view;
   }
 
   async init() {
+    this.currentWorkspaceRoot = this.getWorkspaceRoot();
+    if (this.scope === 'project' && !this.currentWorkspaceRoot) {
+      this.terminals = [];
+      this.activeId = '';
+      this.loading = false;
+      return;
+    }
+    const generation = ++this.loadGeneration;
+    this.loading = true;
     try {
-      this.terminals = await terminalsApi.list();
-      const savedActiveId = readString(storageKeys.terminalActiveId);
+      this.terminals = await terminalsApi.list(this.scope, this.scope === 'project' ? this.currentWorkspaceRoot : undefined);
+      if (generation !== this.loadGeneration) return;
+      const savedActiveId = readString(this.storageKey);
       this.activeId = this.terminals.some((item) => item.id === savedActiveId)
         ? savedActiveId!
         : (this.terminals[0]?.id ?? '');
-      writeString(storageKeys.terminalActiveId, this.activeId);
+      writeString(this.storageKey, this.activeId);
     } catch (error) {
-      this.error = errorMessage(error, 'Unable to load terminals');
+      if (generation === this.loadGeneration) this.error = errorMessage(error, 'Unable to load terminals');
     } finally {
-      this.loading = false;
+      if (generation === this.loadGeneration) this.loading = false;
     }
-    if (this.activeId) this.connect(this.activeId);
+    if (generation === this.loadGeneration && this.activeId) this.connect(this.activeId);
+  }
+
+  async setWorkspaceRoot(root: string) {
+    if (this.scope !== 'project' || root === this.currentWorkspaceRoot) return;
+    this.loadGeneration++;
+    this.disconnect();
+    this.view?.reset();
+    this.currentWorkspaceRoot = root;
+    this.terminals = [];
+    this.activeId = '';
+    this.loading = true;
+    await this.init();
   }
 
   async create() {
-    this.creating = true;
     this.error = '';
+    const workspaceRoot = this.scope === 'project' ? this.currentWorkspaceRoot : undefined;
+    if (this.scope === 'project' && !workspaceRoot) {
+      this.error = 'Open a project before creating a project terminal';
+      return;
+    }
+    this.creating = true;
     try {
-      const terminal = await terminalsApi.create();
+      const terminal = await terminalsApi.create({
+        scope: this.scope,
+        ...(workspaceRoot ? { cwd: workspaceRoot, workspaceRoot, title: `${workspaceRoot.split('/').filter(Boolean).at(-1) || 'Project'} Terminal ${this.terminals.length + 1}` } : {}),
+      });
       this.terminals = [terminal, ...this.terminals];
       this.activeId = terminal.id;
-      writeString(storageKeys.terminalActiveId, terminal.id);
+      writeString(this.storageKey, terminal.id);
       this.connect(terminal.id);
     } catch (error) {
       this.error = errorMessage(error, 'Unable to create terminal');
@@ -78,7 +130,7 @@ export class TerminalController {
       this.terminals = this.terminals.filter((item) => item.id !== id);
       if (this.activeId !== id) return;
       this.activeId = this.terminals[0]?.id ?? '';
-      writeString(storageKeys.terminalActiveId, this.activeId);
+      writeString(this.storageKey, this.activeId);
       if (this.activeId) {
         this.view?.reset();
         this.connect(this.activeId);
@@ -94,7 +146,7 @@ export class TerminalController {
   open(id: string) {
     if (id === this.activeId && this.socketState !== 'closed') return;
     this.activeId = id;
-    writeString(storageKeys.terminalActiveId, id);
+    writeString(this.storageKey, id);
     this.view?.reset();
     this.connect(id);
   }

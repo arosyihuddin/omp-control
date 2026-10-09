@@ -53,9 +53,16 @@ export const logsApi = {
   list: async (limit = 200) => (await request<{ logs: ToolCallLog[] }>(`/api/logs?limit=${limit}`)).logs ?? [],
 };
 
+export type TerminalScope = 'general' | 'project';
+
 export const terminalsApi = {
-  list: async () => (await request<{ terminals: TerminalInfo[] }>('/api/terminals')).terminals ?? [],
-  create: async () => (await postJson<{ terminal: TerminalInfo }>('/api/terminals', {})).terminal,
+  list: async (scope: TerminalScope, workspaceRoot?: string) => {
+    const params = new URLSearchParams({ scope });
+    if (workspaceRoot) params.set('workspaceRoot', workspaceRoot);
+    return (await request<{ terminals: TerminalInfo[] }>(`/api/terminals?${params.toString()}`)).terminals ?? [];
+  },
+  create: async (input: { scope: TerminalScope; cwd?: string; title?: string; workspaceRoot?: string }) =>
+    (await postJson<{ terminal: TerminalInfo }>('/api/terminals', input)).terminal,
   close: (id: string) => request(`/api/terminals/${enc(id)}`, { method: 'DELETE' }),
   socketUrl: (id: string) => (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + runtimeUrl('/api/terminal/socket?id=' + enc(id)),
 };

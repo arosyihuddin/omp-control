@@ -55,6 +55,8 @@ export interface TerminalInfo {
   id: string;
   title: string;
   cwd: string;
+  scope?: 'general' | 'project';
+  workspaceRoot?: string;
   status: 'running' | 'exited';
   createdAt: string;
   updatedAt: string;

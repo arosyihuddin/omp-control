@@ -21,6 +21,8 @@
   let loadError = $state('');
   let selectedIndex = $state(0);
   let resultsContainer = $state<HTMLDivElement>();
+  let shortcutsContainer = $state<HTMLDivElement>();
+  let selectedShortcutIndex = $state(0);
   let requestId = 0;
 
   // Horizontal motion only: unlike Svelte's fly transition, this does not animate opacity.
@@ -108,19 +110,33 @@
   }
 
   function keydown(event: KeyboardEvent) {
+    if (view === 'shortcuts') {
+      if (event.key === 'ArrowDown' && filteredShortcuts.length) {
+        event.preventDefault();
+        selectedShortcutIndex = Math.min(selectedShortcutIndex + 1, filteredShortcuts.length - 1);
+      } else if (event.key === 'ArrowUp' && filteredShortcuts.length) {
+        event.preventDefault();
+        selectedShortcutIndex = Math.max(selectedShortcutIndex - 1, 0);
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        view = 'commands';
+        query = '';
+        selectedIndex = 0;
+      }
+      return;
+    }
     if (event.key === 'ArrowDown' && results.length) {
       event.preventDefault();
-      selectedIndex = (selectedIndex + 1) % results.length;
+      selectedIndex = Math.min(selectedIndex + 1, results.length - 1);
     } else if (event.key === 'ArrowUp' && results.length) {
       event.preventDefault();
-      selectedIndex = (selectedIndex - 1 + results.length) % results.length;
+      selectedIndex = Math.max(selectedIndex - 1, 0);
     } else if (event.key === 'Enter' && results.length) {
       event.preventDefault();
       chooseResult(selectedIndex);
     } else if (event.key === 'Escape') {
       event.preventDefault();
-      if (view === 'shortcuts') { view = 'commands'; query = ''; selectedIndex = 0; }
-      else onclose();
+      onclose();
     }
   }
 
@@ -136,36 +152,42 @@
   $effect(() => {
     if (open && query.trim() && !hasIndexed && !loadingFiles) void indexFiles();
   });
-  $effect(() => { query; selectedIndex = 0; });
+  $effect(() => { query; selectedIndex = 0; selectedShortcutIndex = 0; });
   $effect(() => {
     const index = selectedIndex;
-    if (!open) return;
+    if (!open || view !== 'commands') return;
     const selected = resultsContainer?.querySelector<HTMLElement>(`[data-result-index="${index}"]`);
+    selected?.scrollIntoView({ block: 'nearest' });
+  });
+  $effect(() => {
+    const index = selectedShortcutIndex;
+    if (!open || view !== 'shortcuts') return;
+    const selected = shortcutsContainer?.querySelector<HTMLElement>(`[data-shortcut-index="${index}"]`);
     selected?.scrollIntoView({ block: 'nearest' });
   });
 </script>
 
 <Modal {open} title="Command Center" width="max-w-xl" height="h-[min(70vh,560px)]" onclose={onclose} autofocus>
-  <div class="flex h-full min-h-0 flex-col">
+  <div class="flex h-full min-h-0 flex-col gap-3 p-4">
     <div class="relative min-h-0 flex-1 overflow-hidden">
       {#if view === 'shortcuts'}
-        <div in:slideX={{ x: 36, duration: 220 }} out:slideX={{ x: -36, duration: 180 }} class="absolute inset-0 flex min-h-0 flex-col gap-2 bg-surface-raised">
+        <div in:slideX={{ x: 36, duration: 220 }} out:slideX={{ x: 36, duration: 180 }} class="absolute inset-0 flex min-h-0 flex-col gap-2 bg-surface-raised">
           <div class="flex shrink-0 items-center gap-2">
             <button type="button" aria-label="Back to commands" onclick={() => { view = 'commands'; query = ''; }} class="flex size-8 shrink-0 items-center justify-center rounded-md border border-line text-fg-subtle transition hover:bg-surface-hover hover:text-fg"><ArrowLeft size={15} /></button>
             <div class="min-w-0 flex-1"><p class="text-sm font-medium text-fg">Keyboard Shortcuts</p><p class="text-xs text-fg-subtle">Search common VS Code shortcuts</p></div>
             <span class="rounded border border-line px-1.5 py-1 text-[10px] text-fg-faint">{filteredShortcuts.length} shortcuts</span>
           </div>
           <div class="relative shrink-0"><Search size={16} class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fg-subtle" /><Input bind:value={query} placeholder="Search shortcut, command, or key…" onkeydown={keydown} class="pl-9" autofocus /></div>
-          <div class="min-h-0 flex-1 overflow-y-auto py-1">
+          <div bind:this={shortcutsContainer} class="min-h-0 flex-1 overflow-y-auto py-1">
             {#if filteredShortcuts.length}
-              {#each filteredShortcuts as item (item[1])}
-                <div class="flex items-center gap-3 rounded-md px-3 py-2 transition-colors hover:bg-surface-hover"><div class="min-w-0 flex-1"><p class="text-sm text-fg">{item[1]}</p><p class="truncate text-xs text-fg-subtle">{item[3]}</p><p class="mt-0.5 text-[10px] uppercase tracking-wide text-fg-faint">{item[0]}</p></div><kbd class="shrink-0 rounded-md border border-line bg-surface px-2 py-1 font-mono text-[11px] text-fg-muted">{item[2]}</kbd></div>
+              {#each filteredShortcuts as item, index (item[1])}
+                <div data-shortcut-index={index} aria-current={selectedShortcutIndex === index ? 'true' : undefined} class={['command-result flex items-center gap-3 rounded-md px-3 py-2 text-left transition-colors', selectedShortcutIndex === index ? 'is-selected' : '']}><div class="min-w-0 flex-1"><p class="text-sm text-fg">{item[1]}</p><p class="truncate text-xs text-fg-subtle">{item[3]}</p><p class="mt-0.5 text-[10px] uppercase tracking-wide text-fg-faint">{item[0]}</p></div><kbd class="shrink-0 rounded-md border border-line bg-surface px-2 py-1 font-mono text-[11px] text-fg-muted">{item[2]}</kbd></div>
               {/each}
             {:else}<div class="px-3 py-8 text-center text-sm text-fg-subtle">No matching shortcuts</div>{/if}
           </div>
         </div>
       {:else}
-        <div in:slideX={{ x: -36, duration: 220 }} out:slideX={{ x: 36, duration: 180 }} class="absolute inset-0 flex min-h-0 flex-col gap-2 bg-surface-raised">
+        <div in:slideX={{ x: -36, duration: 220 }} out:slideX={{ x: -36, duration: 220 }} class="absolute inset-0 flex min-h-0 flex-col gap-2 bg-surface-raised">
           <div class="relative shrink-0"><Search size={16} class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fg-subtle" /><Input bind:value={query} placeholder="Search files by name or run a command…" onkeydown={keydown} class="pl-9" autofocus /></div>
           <div bind:this={resultsContainer} class="min-h-0 flex-1 overflow-y-auto py-1">
             {#if results.length}
@@ -196,7 +218,7 @@
         </div>
       {/if}
     </div>
-    <div class="flex shrink-0 items-center gap-3 border-t border-line pt-2 text-[11px] text-fg-faint"><span>↑↓ Navigate</span><span>↵ Open / Run</span><span>Esc {view === 'shortcuts' ? 'Back' : 'Close'}</span>{#if loadingFiles}<span class="ml-auto">Indexing files…</span>{/if}</div>
+    <div class="flex shrink-0 items-center gap-3 border-t border-line pt-3 text-[11px] text-fg-faint"><span>↑↓ Navigate</span><span>↵ Open / Run</span><span>Esc {view === 'shortcuts' ? 'Back' : 'Close'}</span>{#if loadingFiles}<span class="ml-auto">Indexing files…</span>{/if}</div>
   </div>
 </Modal>
 

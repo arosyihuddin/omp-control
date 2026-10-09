@@ -25,7 +25,7 @@
   let filter = $state('');
   let terminalOpen = $state(false);
   let terminalSessionsOpen = $state(true);
-  const terminalController = new TerminalController();
+  const terminalController = new TerminalController({ scope: 'project', getWorkspaceRoot: () => editor.root });
   let terminalViewport = $state<ReturnType<typeof TerminalViewport>>();
 
   const visibleItems = $derived(editor.items
@@ -44,6 +44,10 @@
     terminalController.attach({ write: (data) => terminalViewport?.write(data), reset: () => terminalViewport?.reset(), focus: () => terminalViewport?.focus(), refit: () => terminalViewport?.refit() });
     void terminalController.init();
     return () => terminalController.dispose();
+  });
+
+  $effect(() => {
+    void terminalController.setWorkspaceRoot(editor.root);
   });
 
   onMount(() => {
