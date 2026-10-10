@@ -1,16 +1,9 @@
 import { fileURLToPath } from "node:url";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
-import { defineConfig, loadEnv } from "vite";
-
-const envDir = fileURLToPath(new URL(".", import.meta.url));
-
-export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, envDir, "");
-  const backend = env.OMP_MCP_BACKEND ?? "http://127.0.0.1:48766";
+import { defineConfig } from "vite";
 
 // https://vite.dev/config/
-return {
-  envDir,
+export default defineConfig(() => ({
   plugins: [svelte()],
   resolve: {
     alias: {
@@ -20,9 +13,7 @@ return {
   },
   server: {
     proxy: {
-      "/api": { target: backend, changeOrigin: true, ws: true },
-      "/control": { target: env.OMP_CONTROL_API ?? "http://127.0.0.1:48767", changeOrigin: true, ws: true },
+      "/control": { target: "http://127.0.0.1:48767", changeOrigin: true, ws: true },
     },
   },
-  };
-});
+}));

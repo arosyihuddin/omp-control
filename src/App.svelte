@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import AppShell from '$lib/components/layout/AppShell.svelte';
+  import InstancePicker from '$lib/components/layout/InstancePicker.svelte';
   import Sidebar from '$lib/components/layout/Sidebar.svelte';
   import Topbar from '$lib/components/layout/Topbar.svelte';
   import { dashboard } from '$lib/stores/dashboard.svelte';
@@ -22,25 +23,63 @@
   import Approvals from './pages/Approvals.svelte';
 
 
+  import AuthPage from './pages/AuthPage.svelte';
+  let appReady = $state(false);
+  let authenticated = $state(false);
+  let showInstancePicker = $state(false);
+  let stopDashboardEvents: (() => void) | undefined;
 
   onMount(() => {
     ui.init();
     const stopRouter = router.init();
     theme.init();
-    const stopEvents = dashboard.connect();
+    const onLogout = async () => {
+      try {
+        await fetch('/control/v1/auth/logout', { method: 'POST' });
+      } catch (error) {
+        console.error('Logout request failed:', error);
+      }
+      authenticated = false;
+      showInstancePicker = false;
+      stopDashboardEvents?.();
+      stopDashboardEvents = undefined;
+    };
+    const onAuthRequired = () => {
+      authenticated = false;
+      showInstancePicker = false;
+      stopDashboardEvents?.();
+      stopDashboardEvents = undefined;
+    };
+    const onShowInstancePicker = () => { showInstancePicker = true; };
     const onInstanceChange = () => {
       void dashboard.refresh();
       void profile.load();
       void prefs.reload();
     };
     window.addEventListener('omp-control:instance-change', onInstanceChange);
-    void instanceRegistry.load().then(async () => {
-      await Promise.all([dashboard.refresh(), prefs.init(), profile.load()]);
-    });
+    window.addEventListener('omp-control:show-instance-picker', onShowInstancePicker);
+    window.addEventListener('omp-control:auth-required', onAuthRequired);
+    window.addEventListener('omp-control:logout', onLogout);
+    void fetch('/control/v1/auth/status')
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error('Unable to check login status')))
+      .then(async (status: { authenticated: boolean }) => {
+        authenticated = status.authenticated;
+        if (authenticated) {
+          stopDashboardEvents = dashboard.connect();
+          await instanceRegistry.load();
+          if (!instanceRegistry.active) showInstancePicker = true;
+          await Promise.all([dashboard.refresh(), prefs.init(), profile.load()]);
+        }
+      })
+      .catch((error) => console.error('Authentication status check failed:', error))
+      .finally(() => { appReady = true; });
     return () => {
       stopRouter();
-      stopEvents();
+      stopDashboardEvents?.();
       window.removeEventListener('omp-control:instance-change', onInstanceChange);
+      window.removeEventListener('omp-control:show-instance-picker', onShowInstancePicker);
+      window.removeEventListener('omp-control:logout', onLogout);
+      window.removeEventListener('omp-control:auth-required', onAuthRequired);
     };
   });
 
@@ -48,8 +87,22 @@
   $effect(() => {
     if (router.current === 'workspace-files') void browser.refresh();
   });
+  async function handleAuthenticated() {
+    if (!stopDashboardEvents) stopDashboardEvents = dashboard.connect();
+    authenticated = true;
+    await instanceRegistry.load();
+    if (!instanceRegistry.active) showInstancePicker = true;
+    await Promise.all([dashboard.refresh(), prefs.init(), profile.load()]);
+  }
 </script>
 
+{#if !appReady}
+  <div class="flex h-full items-center justify-center bg-canvas text-fg"><div class="h-6 w-6 animate-spin rounded-full border-2 border-line border-t-accent"></div></div>
+{:else if !authenticated}
+  <AuthPage onAuthenticated={handleAuthenticated} />
+{:else if showInstancePicker || !instanceRegistry.active}
+  <InstancePicker onenter={() => { showInstancePicker = false; void dashboard.refresh(); void prefs.reload(); void profile.load(); }} />
+{:else}
 {#snippet sidebar()}
   <Sidebar />
 {/snippet}
@@ -83,3 +136,4 @@
     <EditorView />
     {/if}
   </AppShell>
+{/if}

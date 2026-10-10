@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ArrowLeftRight, Settings } from '@lucide/svelte';
+  import { ArrowLeftRight, LogOut, Settings } from '@lucide/svelte';
   import { Avatar, Menu, MenuItem } from '$lib/components/ui';
   import { dashboard } from '$lib/stores/dashboard.svelte';
   import { profile } from '$lib/stores/profile.svelte';
@@ -44,8 +44,9 @@
     </button>
   {/snippet}
   {#snippet children({ close })}
-    <MenuItem onclick={() => { close(); settingsSection = 'instances'; settingsOpen = true; }}><ArrowLeftRight size={13} /> Switch instance</MenuItem>
+    <MenuItem onclick={() => { close(); window.dispatchEvent(new CustomEvent('omp-control:show-instance-picker')); }}><ArrowLeftRight size={13} /> Switch instance</MenuItem>
     <MenuItem onclick={() => { close(); settingsOpen = true; }}><Settings size={13} /> Settings</MenuItem>
+    <MenuItem onclick={() => { close(); window.dispatchEvent(new CustomEvent('omp-control:logout')); }}><LogOut size={13} /> Logout</MenuItem>
   {/snippet}
 </Menu>
 

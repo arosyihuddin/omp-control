@@ -1,6 +1,7 @@
 import { Database } from "bun:sqlite";
 import { chmodSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { createHash } from "node:crypto";
 import { randomUUID } from "node:crypto";
 
 const port = Number(process.env.OMP_CONTROL_PORT ?? 48767);
@@ -16,6 +17,34 @@ try {
   chmodSync(dbPath + "-shm", 0o600);
 } catch {}
 db.exec("CREATE TABLE IF NOT EXISTS instances (id TEXT PRIMARY KEY, name TEXT NOT NULL, base_url TEXT NOT NULL, credential TEXT, status TEXT NOT NULL DEFAULT 'unknown', version TEXT, last_seen_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)");
+db.exec("CREATE TABLE IF NOT EXISTS auth_users (id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, created_at TEXT NOT NULL)");
+db.exec("CREATE TABLE IF NOT EXISTS auth_sessions (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE, expires_at INTEGER NOT NULL)");
+const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
+const cookieName = "omp_control_session";
+function requestUsesHttps(req: Request): boolean {
+  const origin = req.headers.get("origin");
+  if (origin) {
+    try { return new URL(origin).protocol === "https:"; } catch {}
+  }
+  return new URL(req.url).protocol === "https:";
+}
+function sessionToken(req: Request): string | null {
+  const cookie = req.headers.get("cookie") ?? "";
+  const part = cookie.split(";").map((v) => v.trim()).find((v) => v.startsWith(cookieName + "="));
+  return part ? decodeURIComponent(part.slice(cookieName.length + 1)) : null;
+}
+function authenticated(req: Request): boolean {
+  const token = sessionToken(req);
+  if (!token) return false;
+  const row = db.query("SELECT token_hash FROM auth_sessions WHERE token_hash = ? AND expires_at > ?").get(hashToken(token), Date.now()) as { token_hash: string } | null;
+  return !!row;
+}
+function sessionCookie(token: string, maxAge: number, secure: boolean) {
+  return cookieName + "=" + encodeURIComponent(token) + "; Path=/control; HttpOnly; SameSite=Strict; Max-Age=" + maxAge + (secure ? "; Secure" : "");
+}
+function authSend(data: unknown, cookie: string, status = 200) {
+  return Response.json(data, { status, headers: { "cache-control": "no-store", "set-cookie": cookie } });
+}
 
 type Row = { id: string; name: string; base_url: string; status: string; version: string | null; last_seen_at: string | null; created_at: string; updated_at: string };
 const publicInstance = (r: Row) => ({ id: r.id, name: r.name, baseUrl: r.base_url, status: r.status, ...(r.version ? { version: r.version } : {}), ...(r.last_seen_at ? { lastSeenAt: r.last_seen_at } : {}), createdAt: r.created_at, updatedAt: r.updated_at });
@@ -201,6 +230,40 @@ const server = Bun.serve({
     if (url.pathname === "/healthz") return send({ status: "ok", service: "omp-control" });
     if (!url.pathname.startsWith("/control/v1/")) return fail("NOT_FOUND", "Route not found", 404);
     try {
+      if (url.pathname === "/control/v1/auth/status" && req.method === "GET") {
+        const configured = (db.query("SELECT COUNT(*) AS count FROM auth_users").get() as { count: number }).count > 0;
+        return send({ configured, authenticated: authenticated(req) });
+      }
+      if (url.pathname === "/control/v1/auth/setup" && req.method === "POST") {
+        if ((db.query("SELECT COUNT(*) AS count FROM auth_users").get() as { count: number }).count > 0) return fail("ALREADY_CONFIGURED", "An account has already been created", 409);
+        const body = await readJson(req);
+        const username = typeof body.username === "string" ? body.username.trim().toLowerCase() : "";
+        const password = typeof body.password === "string" ? body.password : "";
+        if (!/^[a-z0-9._-]{3,64}$/.test(username)) return fail("INVALID_USERNAME", "Username must be 3–64 characters and use letters, numbers, dots, underscores, or hyphens");
+        if (password.length < 12 || password.length > 1024) return fail("INVALID_PASSWORD", "Password must be between 12 and 1024 characters");
+        const id = randomUUID();
+        db.query("INSERT INTO auth_users (id,username,password_hash,created_at) VALUES (?,?,?,?)").run(id, username, await Bun.password.hash(password), new Date().toISOString());
+        const token = randomUUID() + randomUUID();
+        db.query("INSERT INTO auth_sessions (token_hash,user_id,expires_at) VALUES (?,?,?)").run(hashToken(token), id, Date.now() + 30 * 24 * 60 * 60 * 1000);
+        return authSend({ authenticated: true, username }, sessionCookie(token, 30 * 24 * 60 * 60, requestUsesHttps(req)), 201);
+      }
+      if (url.pathname === "/control/v1/auth/login" && req.method === "POST") {
+        const body = await readJson(req);
+        const username = typeof body.username === "string" ? body.username.trim().toLowerCase() : "";
+        const password = typeof body.password === "string" ? body.password : "";
+        const user = db.query("SELECT id,username,password_hash FROM auth_users WHERE username = ?").get(username) as { id: string; username: string; password_hash: string } | null;
+        if (!user || !(await Bun.password.verify(password, user.password_hash))) return fail("INVALID_CREDENTIALS", "Username or password is incorrect", 401);
+        const token = randomUUID() + randomUUID();
+        db.query("INSERT INTO auth_sessions (token_hash,user_id,expires_at) VALUES (?,?,?)").run(hashToken(token), user.id, Date.now() + 30 * 24 * 60 * 60 * 1000);
+        return authSend({ authenticated: true, username: user.username }, sessionCookie(token, 30 * 24 * 60 * 60, requestUsesHttps(req)));
+      }
+      if (url.pathname === "/control/v1/auth/logout" && req.method === "POST") {
+        const token = sessionToken(req);
+        if (token) db.query("DELETE FROM auth_sessions WHERE token_hash = ?").run(hashToken(token));
+        return authSend({ authenticated: false }, sessionCookie("", 0, requestUsesHttps(req)));
+      }
+      if (!url.pathname.startsWith("/control/v1/auth/") && !authenticated(req)) return fail("UNAUTHENTICATED", "Please log in to continue", 401);
+
       const runtimeMatch = url.pathname.match(/^\/control\/v1\/instances\/([^/]+)\/runtime(\/.*)$/);
       if (runtimeMatch && runtimeMatch[2] === "/api/terminal/socket" && req.headers.get("upgrade")?.toLowerCase() === "websocket") {
         return upgradeRuntimeSocket(req, server, decodeURIComponent(runtimeMatch[1]), runtimeMatch[2], url) as Response;

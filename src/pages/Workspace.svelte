@@ -254,7 +254,7 @@
     pickerError = "";
     try {
       const response = await fetch(
-        "/api/workspace?path=" + encodeURIComponent(nextPath),
+        runtimeUrl("/api/workspace?path=" + encodeURIComponent(nextPath)),
         { cache: "no-store" },
       );
       const data = await response.json();
@@ -302,7 +302,7 @@
     editorError = "";
     try {
       const response = await fetch(
-        "/api/workspace/file?path=" + encodeURIComponent(filePath),
+        runtimeUrl("/api/workspace/file?path=" + encodeURIComponent(filePath)),
         { cache: "no-store" },
       );
       const data = await response.json();
@@ -339,7 +339,7 @@
     editorError = "";
     try {
       const response = await fetch(
-        "/api/workspace/file?path=" + encodeURIComponent(editorPath),
+        runtimeUrl("/api/workspace/file?path=" + encodeURIComponent(editorPath)),
         {
           method: "PUT",
           headers: { "content-type": "text/plain; charset=utf-8" },

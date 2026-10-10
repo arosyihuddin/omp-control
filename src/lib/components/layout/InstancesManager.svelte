@@ -36,6 +36,7 @@
   }
   async function saveInstance() {
     if (saving || !name.trim() || !baseUrl.trim()) return;
+    const hadActiveInstance = Boolean(instanceRegistry.activeId);
     saving = true; error = ""; notice = "";
     try {
       if (editing) {
@@ -52,6 +53,7 @@
       showForm = false; editing = null;
       name = ""; baseUrl = "http://127.0.0.1:48766"; credential = "";
       await load();
+      if (!hadActiveInstance && instanceRegistry.active) onenter();
     } catch (e) { error = e instanceof Error ? e.message : (editing ? "Unable to update instance" : "Unable to register instance"); }
     finally { saving = false; }
   }
