@@ -83,7 +83,7 @@ export interface GpuDevice {
 export interface SystemTelemetry {
   os?: { hostname?: string; pretty_name?: string; platform?: string; architecture?: string; kernel?: string };
   desktop?: { environment?: string; display_server?: string };
-  cpu?: { logical_cores?: number; load_average?: Record<'1m' | '5m' | '15m', number> };
+  cpu?: { logical_cores?: number; usage_percent?: number | null; load_average?: Record<'1m' | '5m' | '15m', number> };
   memory?: { used_bytes?: number; total_bytes?: number; usage_percent?: number };
   disk?: { path?: string; used_bytes?: number; total_bytes?: number; usage_percent?: number };
   gpu?: { devices?: GpuDevice[] };

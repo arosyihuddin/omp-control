@@ -4,39 +4,35 @@
   import { dashboard } from '$lib/stores/dashboard.svelte';
   import { router } from '$lib/stores/router.svelte';
   import OverviewSkeleton from '$features/overview/OverviewSkeleton.svelte';
-  import ResourcePanel from '$features/overview/ResourcePanel.svelte';
   import RiskPanel from '$features/overview/RiskPanel.svelte';
   import RuntimePanel from '$features/overview/RuntimePanel.svelte';
   import StoragePanel from '$features/overview/StoragePanel.svelte';
   import SystemPanel from '$features/overview/SystemPanel.svelte';
   import { SessionList } from '$features/sessions';
 
-  type ResourceSample = { time: string; cpu: number | null; memory: number | null; disk: number | null; gpu: number | null };
+  type ResourceSample = { time: string; cpu: number | null; memoryGiB: number | null; gpu: number | null };
   const system = $derived(dashboard.host.system ?? {});
   const service = $derived(dashboard.host.service ?? {});
   const running = $derived(dashboard.sessions.filter((session) => session.status === 'running').length);
-  const memoryPercent = $derived(system.memory?.usage_percent ?? null);
-  const diskPercent = $derived(system.disk?.usage_percent ?? null);
+  const memoryUsedGiB = $derived(system.memory?.used_bytes == null ? null : system.memory.used_bytes / 1024 ** 3);
+  const memoryTotalGiB = $derived(system.memory?.total_bytes == null ? null : system.memory.total_bytes / 1024 ** 3);
   const gpu = $derived(system.gpu?.devices?.[0]);
   let resourceHistory = $state<ResourceSample[]>([]);
   $effect(() => {
-    const cores = system.cpu?.logical_cores ?? 0;
-    const load = system.cpu?.load_average?.['1m'];
     const sample: ResourceSample = {
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-      cpu: load == null || cores <= 0 ? null : Math.max(0, Math.min(100, load / cores * 100)),
-      memory: memoryPercent == null ? null : Math.max(0, Math.min(100, memoryPercent)),
-      disk: diskPercent == null ? null : Math.max(0, Math.min(100, diskPercent)),
+      cpu: system.cpu?.usage_percent == null ? null : Math.max(0, Math.min(100, system.cpu.usage_percent)),
+      memoryGiB: memoryUsedGiB,
       gpu: gpu?.utilization_gpu_percent == null ? null : Math.max(0, Math.min(100, gpu.utilization_gpu_percent)),
     };
     const previous = untrack(() => resourceHistory.at(-1));
-    if (previous && previous.cpu === sample.cpu && previous.memory === sample.memory && previous.disk === sample.disk && previous.gpu === sample.gpu) return;
-    resourceHistory = [...untrack(() => resourceHistory).slice(-29), sample];
+    if (previous && previous.cpu === sample.cpu && previous.memoryGiB === sample.memoryGiB && previous.gpu === sample.gpu) return;
+    resourceHistory = [...untrack(() => resourceHistory).slice(-59), sample];
   });
-  const linePoints = (key: 'cpu' | 'memory' | 'disk' | 'gpu') => resourceHistory
-    .map((sample, index) => sample[key] == null ? null : `${resourceHistory.length < 2 ? 0 : index / (resourceHistory.length - 1) * 100},${100 - (sample[key] ?? 0)}`)
+  const linePoints = (key: 'cpu' | 'memoryGiB' | 'gpu', max = 100) => resourceHistory
+    .map((sample, index) => sample[key] == null ? null : `${16 + (resourceHistory.length < 2 ? 0 : index / (resourceHistory.length - 1) * 294)},${14 + (1 - Math.max(0, Math.min(max, sample[key] ?? 0)) / max) * 102}`)
     .filter((point): point is string => point !== null).join(' ');
-  const latest = (key: 'cpu' | 'memory' | 'disk' | 'gpu') => resourceHistory.at(-1)?.[key] ?? null;
+  const latest = (key: 'cpu' | 'memoryGiB' | 'gpu') => resourceHistory.at(-1)?.[key] ?? null;
 </script>
 
 {#if dashboard.loading}
@@ -74,37 +70,43 @@
         {/snippet}
       </StatCard>
     </section>
-    <section class="grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-2" aria-label="Resource visualizations">
+    <section class="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-3" aria-label="Resource visualizations">
       <div class="min-w-0 rounded-xl border border-line bg-surface-raised p-4 shadow-card sm:p-5">
-        <div class="flex items-start justify-between gap-3"><div><h2 class="text-sm font-semibold text-fg">CPU load trend</h2><p class="mt-1 text-xs text-fg-subtle">Load average 1m relative to logical cores</p></div><span class="rounded-md border border-line bg-surface px-2 py-1 text-xs text-fg-faint">{system.cpu?.logical_cores ?? '—'} cores</span></div>
-        <div class="mt-4 rounded-lg bg-surface/70 p-2">
-          <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="h-36 w-full overflow-visible" role="img" aria-label="CPU load history line chart">
-            {#each [0, 25, 50, 75, 100] as tick}<line x1="0" x2="100" y1={tick} y2={tick} stroke="currentColor" stroke-opacity="0.1" stroke-width="0.5" vector-effect="non-scaling-stroke" />{/each}
-            {#if resourceHistory.length > 1}<polyline points={linePoints('cpu')} fill="none" stroke="#60a5fa" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round" />{/if}
+        <div class="flex items-start justify-between gap-3"><div><h2 class="text-sm font-semibold text-fg">CPU utilization</h2><p class="mt-1 text-xs text-fg-subtle">Recent host CPU usage</p></div><span class="rounded-md border border-line bg-surface px-2 py-1 text-xs text-fg-faint">{system.cpu?.logical_cores ?? '—'} cores</span></div>
+        <div class="mt-3">
+          <svg viewBox="0 0 320 180" preserveAspectRatio="xMidYMid meet" class="h-48 w-full sm:h-56" role="img" aria-label="CPU utilization line chart, percentage over time">
+            {#each [100, 75, 50, 25, 0] as tick, i}<line x1="16" x2="310" y1={18 + i * 33} y2={18 + i * 33} stroke="currentColor" stroke-opacity="0.12" stroke-width="1" /><text x="4" y={22 + i * 33} text-anchor="end" font-size="10" fill="currentColor" opacity="0.7">{tick}%</text>{/each}
+            <line x1="16" x2="16" y1="18" y2="150" stroke="currentColor" stroke-opacity="0.3" /><line x1="16" x2="310" y1="150" y2="150" stroke="currentColor" stroke-opacity="0.3" />
+            {#if resourceHistory.length > 1}<polyline points={linePoints('cpu')} fill="none" stroke="#60a5fa" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />{/if}
           </svg>
         </div>
         <div class="mt-2 flex items-center justify-between text-xs text-fg-faint"><span>{resourceHistory[0]?.time ?? 'Waiting for telemetry'}</span><span>{resourceHistory.at(-1)?.time ?? '—'}</span></div>
-        <div class="mt-3 flex items-baseline justify-between"><span class="text-sm text-fg-subtle">Current normalized load</span><span class="text-lg font-semibold tabular-nums text-fg">{latest('cpu') == null ? '—' : `${latest('cpu')!.toFixed(1)}%`}</span></div>
-        <p class="mt-2 text-xs leading-5 text-fg-faint">Tren bertambah saat telemetry berubah. Ini load average per core, bukan CPU utilization.</p>
+        <div class="mt-3 flex items-baseline justify-between"><span class="text-sm text-fg-subtle">Current CPU</span><span class="text-lg font-semibold tabular-nums text-fg">{latest('cpu') == null ? '—' : `${latest('cpu')!.toFixed(1)}%`}</span></div>
       </div>
       <div class="min-w-0 rounded-xl border border-line bg-surface-raised p-4 shadow-card sm:p-5">
-        <div class="flex items-start justify-between gap-3"><div><h2 class="text-sm font-semibold text-fg">Resource utilization trend</h2><p class="mt-1 text-xs text-fg-subtle">Riwayat pemakaian resource (%)</p></div><span class="text-xs text-fg-faint">{resourceHistory.length} samples</span></div>
-        <div class="mt-4 rounded-lg bg-surface/70 p-2">
-          <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="h-36 w-full overflow-visible" role="img" aria-label="Memory, disk and GPU utilization line chart">
-            {#each [0, 25, 50, 75, 100] as tick}<line x1="0" x2="100" y1={tick} y2={tick} stroke="currentColor" stroke-opacity="0.1" stroke-width="0.5" vector-effect="non-scaling-stroke" />{/each}
-            {#if resourceHistory.length > 1}
-              <polyline points={linePoints('memory')} fill="none" stroke="#38bdf8" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round" />
-              <polyline points={linePoints('disk')} fill="none" stroke="#a78bfa" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round" />
-              {#if gpu}<polyline points={linePoints('gpu')} fill="none" stroke="#fbbf24" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round" />{/if}
-            {/if}
+        <div class="flex items-start justify-between gap-3"><div><h2 class="text-sm font-semibold text-fg">Memory (RAM)</h2><p class="mt-1 text-xs text-fg-subtle">Used memory over time</p></div><span class="rounded-md border border-line bg-surface px-2 py-1 text-xs text-fg-faint">{memoryTotalGiB == null ? '—' : `${memoryTotalGiB.toFixed(1)} GiB total`}</span></div>
+        <div class="mt-3">
+          <svg viewBox="0 0 320 180" preserveAspectRatio="xMidYMid meet" class="h-48 w-full sm:h-56" role="img" aria-label="RAM usage line chart, GiB over time">
+            {#each [100, 75, 50, 25, 0] as tick, i}<line x1="16" x2="310" y1={18 + i * 33} y2={18 + i * 33} stroke="currentColor" stroke-opacity="0.12" stroke-width="1" /><text x="4" y={22 + i * 33} text-anchor="end" font-size="10" fill="currentColor" opacity="0.7">{memoryTotalGiB == null ? '—' : (memoryTotalGiB * tick / 100).toFixed(0)}</text>{/each}
+            <text x="16" y="10" font-size="10" fill="currentColor" opacity="0.65">GiB</text>
+            <line x1="16" x2="16" y1="18" y2="150" stroke="currentColor" stroke-opacity="0.3" /><line x1="16" x2="310" y1="150" y2="150" stroke="currentColor" stroke-opacity="0.3" />
+            {#if resourceHistory.length > 1 && memoryTotalGiB != null}<polyline points={linePoints('memoryGiB', memoryTotalGiB)} fill="none" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />{/if}
           </svg>
         </div>
-        <div class="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs">
-          <span class="inline-flex items-center gap-1.5 text-fg-subtle"><span class="h-2 w-2 rounded-full bg-sky-400"></span>Memory {latest('memory') == null ? '—' : `${latest('memory')!.toFixed(1)}%`}</span>
-          <span class="inline-flex items-center gap-1.5 text-fg-subtle"><span class="h-2 w-2 rounded-full bg-violet-400"></span>Disk {latest('disk') == null ? '—' : `${latest('disk')!.toFixed(1)}%`}</span>
-          {#if gpu}<span class="inline-flex items-center gap-1.5 text-fg-subtle"><span class="h-2 w-2 rounded-full bg-amber-400"></span>GPU {latest('gpu') == null ? '—' : `${latest('gpu')!.toFixed(1)}%`}</span>{/if}
+        <div class="mt-2 flex items-center justify-between text-xs text-fg-faint"><span>{resourceHistory[0]?.time ?? 'Waiting for telemetry'}</span><span>{resourceHistory.at(-1)?.time ?? '—'}</span></div>
+        <div class="mt-3 flex items-baseline justify-between"><span class="text-sm text-fg-subtle">RAM used</span><span class="text-lg font-semibold tabular-nums text-fg">{latest('memoryGiB') == null ? '—' : `${latest('memoryGiB')!.toFixed(1)} GiB`}</span></div>
+      </div>
+      <div class="min-w-0 rounded-xl border border-line bg-surface-raised p-4 shadow-card sm:p-5">
+        <div class="flex items-start justify-between gap-3"><div><h2 class="text-sm font-semibold text-fg">GPU utilization</h2><p class="mt-1 text-xs text-fg-subtle">Recent GPU compute usage</p></div><span class="max-w-36 truncate rounded-md border border-line bg-surface px-2 py-1 text-xs text-fg-faint">{gpu?.name ?? (gpu ? 'GPU detected' : 'Unavailable')}</span></div>
+        <div class="mt-3">
+          <svg viewBox="0 0 320 180" preserveAspectRatio="xMidYMid meet" class="h-48 w-full sm:h-56" role="img" aria-label="GPU utilization line chart, percentage over time">
+            {#each [100, 75, 50, 25, 0] as tick, i}<line x1="16" x2="310" y1={18 + i * 33} y2={18 + i * 33} stroke="currentColor" stroke-opacity="0.12" stroke-width="1" /><text x="4" y={22 + i * 33} text-anchor="end" font-size="10" fill="currentColor" opacity="0.7">{tick}%</text>{/each}
+            <line x1="16" x2="16" y1="18" y2="150" stroke="currentColor" stroke-opacity="0.3" /><line x1="16" x2="310" y1="150" y2="150" stroke="currentColor" stroke-opacity="0.3" />
+            {#if resourceHistory.length > 1 && gpu}<polyline points={linePoints('gpu')} fill="none" stroke="#fbbf24" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />{/if}
+          </svg>
         </div>
         <div class="mt-2 flex items-center justify-between text-xs text-fg-faint"><span>{resourceHistory[0]?.time ?? 'Waiting for telemetry'}</span><span>{resourceHistory.at(-1)?.time ?? '—'}</span></div>
+        <div class="mt-3 flex items-baseline justify-between"><span class="text-sm text-fg-subtle">Current GPU</span><span class="text-lg font-semibold tabular-nums text-fg">{latest('gpu') == null ? '—' : `${latest('gpu')!.toFixed(1)}%`}</span></div>
       </div>
     </section>
     <section>
@@ -112,9 +114,8 @@
         <div><h2 class="text-base font-semibold text-fg">Host health</h2><p class="mt-0.5 text-sm text-fg-subtle">Resource usage and system environment</p></div>
         <span class="text-xs text-fg-faint">{system.cpu?.logical_cores ?? '—'} logical CPU cores</span>
       </div>
-      <div class="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
+      <div class="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
         <SystemPanel {system} {service} />
-        <ResourcePanel {system} />
         <StoragePanel {system} />
       </div>
     </section>
