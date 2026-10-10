@@ -12,6 +12,7 @@
   import { ui } from '$lib/stores/ui.svelte';
   import Overview from './pages/Overview.svelte';
   import Logs from './pages/Logs.svelte';
+  import Tunnels from './pages/Tunnels.svelte';
   import { browser } from './features/workspace/browser.svelte';
   import FavoritesView from './features/workspace/FavoritesView.svelte';
   import FilesView from './features/workspace/FilesView.svelte';
@@ -29,6 +30,7 @@
   let authenticated = $state(false);
   let showInstancePicker = $state(false);
   let stopDashboardEvents: (() => void) | undefined;
+  let loadingInstanceData = false;
 
   onMount(() => {
     ui.init();
@@ -53,9 +55,10 @@
     };
     const onShowInstancePicker = () => { showInstancePicker = true; };
     const onInstanceChange = () => {
-      void dashboard.refresh();
+      if (loadingInstanceData) return;
+      if (router.current === 'overview') void dashboard.refresh();
+      if (router.inWorkspace) void prefs.reload();
       void profile.load();
-      void prefs.reload();
     };
     window.addEventListener('omp-control:instance-change', onInstanceChange);
     window.addEventListener('omp-control:show-instance-picker', onShowInstancePicker);
@@ -66,10 +69,11 @@
       .then(async (status: { authenticated: boolean }) => {
         authenticated = status.authenticated;
         if (authenticated) {
-          stopDashboardEvents = dashboard.connect();
+          loadingInstanceData = true;
           await instanceRegistry.load();
+          loadingInstanceData = false;
           if (!instanceRegistry.active) showInstancePicker = true;
-          await Promise.all([dashboard.refresh(), prefs.init(), profile.load()]);
+          await profile.load();
         }
       })
       .catch((error) => console.error('Authentication status check failed:', error))
@@ -84,16 +88,42 @@
     };
   });
 
+  // Dashboard telemetry is only needed on Overview; avoid a background SSE stream on other pages.
+  $effect(() => {
+    const activeInstance = instanceRegistry.active;
+    if (!authenticated || !activeInstance || router.current !== 'overview') return;
+    const stop = dashboard.connect();
+    stopDashboardEvents = stop;
+    void dashboard.refresh();
+    return () => {
+      stop();
+      if (stopDashboardEvents === stop) stopDashboardEvents = undefined;
+    };
+  });
+
+  // Sessions need their own initial snapshot; dashboard telemetry stays limited to Overview.
+  $effect(() => {
+    if (!authenticated || !instanceRegistry.active || router.current !== 'sessions') return;
+    void dashboard.refresh();
+  });
+
+  // Workspace preferences are loaded only when entering a workspace route.
+  $effect(() => {
+    if (authenticated && instanceRegistry.active && router.inWorkspace) void prefs.init();
+  });
+
   // The Files view owns its listing (browser store); reload whenever it is shown.
   $effect(() => {
     if (router.current === 'workspace-files') void browser.refresh();
   });
+
   async function handleAuthenticated() {
-    if (!stopDashboardEvents) stopDashboardEvents = dashboard.connect();
     authenticated = true;
+    loadingInstanceData = true;
     await instanceRegistry.load();
+    loadingInstanceData = false;
     if (!instanceRegistry.active) showInstancePicker = true;
-    await Promise.all([dashboard.refresh(), prefs.init(), profile.load()]);
+    await profile.load();
   }
 </script>
 
@@ -102,7 +132,7 @@
 {:else if !authenticated}
   <AuthPage onAuthenticated={handleAuthenticated} />
 {:else if showInstancePicker || !instanceRegistry.active}
-  <InstancePicker onback={() => { showInstancePicker = false; }} onenter={() => { showInstancePicker = false; void dashboard.refresh(); void prefs.reload(); void profile.load(); }} />
+  <InstancePicker onback={() => { showInstancePicker = false; }} onenter={() => { showInstancePicker = false; if (router.current === 'overview') void dashboard.refresh(); if (router.inWorkspace) void prefs.reload(); void profile.load(); }} />
 {:else}
 {#snippet sidebar()}
   <Sidebar />
@@ -129,6 +159,8 @@
     <TerminalPage />
   {:else if router.current === 'logs'}
     <Logs />
+  {:else if router.current === 'tunnels'}
+    <Tunnels />
   {:else if router.current === 'workspace-files'}
     <FilesView />
   {:else if router.current === 'workspace-favorites'}

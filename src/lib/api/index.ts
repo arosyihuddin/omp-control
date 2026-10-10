@@ -22,6 +22,26 @@ export { errorMessage } from './http';
 
 const enc = encodeURIComponent;
 
+
+export type TunnelStatus = 'starting' | 'active' | 'stopping' | 'stopped' | 'error';
+export interface TunnelInfo {
+  id: string;
+  targetUrl: string;
+  status: TunnelStatus;
+  publicUrl: string | null;
+  createdAt: string;
+  logs: string[];
+  error: string | null;
+}
+export interface CloudflaredStatus { installed: boolean; path: string | null; version: string | null; }
+
+export const tunnelsApi = {
+  list: async () => (await request<{ tunnels: TunnelInfo[] }>('/control/v1/tunnels')).tunnels ?? [],
+  status: async () => request<CloudflaredStatus>('/control/v1/tunnels/status'),
+  start: async (targetUrl: string) => (await postJson<{ tunnel: TunnelInfo }>('/control/v1/tunnels', { targetUrl })).tunnel,
+  stop: async (id: string) => (await postJson<{ tunnel: TunnelInfo }>('/control/v1/tunnels/' + enc(id) + '/stop')).tunnel,
+};
+
 export const dashboardApi = {
   snapshot: () => request<DashboardSnapshot>('/api/dashboard'),
 };

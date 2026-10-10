@@ -3,6 +3,7 @@ import {
   Code2,
   Folder,
   LayoutDashboard,
+  Network,
   ScrollText,
   ShieldCheck,
   Star,
@@ -18,6 +19,7 @@ export type RouteId =
   | 'sessions'
   | 'terminal'
   | 'logs'
+  | 'tunnels'
   | 'workspace-favorites'
   | 'workspace-files'
   | 'workspace-editor';
@@ -37,12 +39,13 @@ export const routes: Record<RouteId, RouteDef> = {
   sessions: { id: 'sessions', path: '/sessions', title: 'OMP Sessions', icon: Activity },
   terminal: { id: 'terminal', path: '/terminal', title: 'Terminal', icon: TerminalIcon },
   logs: { id: 'logs', path: '/logs', title: 'Logs', icon: ScrollText },
+  tunnels: { id: 'tunnels', path: '/tunnels', title: 'Tunnels', icon: Network },
   'workspace-favorites': { id: 'workspace-favorites', path: '/workspace/favorites', title: 'Favorites', icon: Star },
   'workspace-files': { id: 'workspace-files', path: '/workspace/files', title: 'Files', icon: Folder },
   'workspace-editor': { id: 'workspace-editor', path: '/workspace/editor', title: 'Editor', icon: Code2 },
 };
 
-export const mainNav: RouteId[] = ['overview', 'tools', 'approvals', 'sessions', 'terminal', 'logs'];
+export const mainNav: RouteId[] = ['overview', 'tools', 'approvals', 'sessions', 'terminal', 'logs', 'tunnels'];
 export const workspaceNav: RouteId[] = ['workspace-favorites', 'workspace-files', 'workspace-editor'];
 
 const byPath = new Map<string, RouteId>(Object.values(routes).map((route) => [route.path, route.id]));

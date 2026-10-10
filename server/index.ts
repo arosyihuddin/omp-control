@@ -203,6 +203,167 @@ function upgradeRuntimeSocket(req: Request, server: any, instanceId: string, pat
   }
 }
 
+
+type TunnelStatus = "starting" | "active" | "stopping" | "stopped" | "error";
+type TunnelRecord = {
+  id: string;
+  targetUrl: string;
+  status: TunnelStatus;
+  publicUrl: string | null;
+  createdAt: string;
+  logs: string[];
+  error: string | null;
+  process: ReturnType<typeof Bun.spawn> | null;
+};
+const tunnels = new Map<string, TunnelRecord>();
+const tunnelEventClients = new Set<ReadableStreamDefaultController<Uint8Array>>();
+const tunnelEncoder = new TextEncoder();
+const publicTunnel = (t: TunnelRecord) => ({
+  id: t.id, targetUrl: t.targetUrl, status: t.status, publicUrl: t.publicUrl,
+  createdAt: t.createdAt, logs: t.logs.slice(-100), error: t.error,
+});
+function tunnelSnapshot() {
+  return [...tunnels.values()].map(publicTunnel).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+function publishTunnelSnapshot() {
+  const event = tunnelEncoder.encode(`event: tunnels\ndata: ${JSON.stringify({ tunnels: tunnelSnapshot() })}\n\n`);
+  for (const client of tunnelEventClients) {
+    try { client.enqueue(event); } catch { tunnelEventClients.delete(client); }
+  }
+}
+function tunnelEventsResponse() {
+  let heartbeat: ReturnType<typeof setInterval> | undefined;
+  let controllerRef: ReadableStreamDefaultController<Uint8Array> | undefined;
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controllerRef = controller;
+      tunnelEventClients.add(controller);
+      controller.enqueue(tunnelEncoder.encode(`event: tunnels\ndata: ${JSON.stringify({ tunnels: tunnelSnapshot() })}\n\n`));
+      heartbeat = setInterval(() => {
+        try { controller.enqueue(tunnelEncoder.encode(': keep-alive\n\n')); }
+        catch { if (controllerRef) tunnelEventClients.delete(controllerRef); if (heartbeat) clearInterval(heartbeat); }
+      }, 20000);
+    },
+    cancel() {
+      if (controllerRef) tunnelEventClients.delete(controllerRef);
+      if (heartbeat) clearInterval(heartbeat);
+    },
+  });
+  return new Response(stream, { headers: { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-cache, no-store, must-revalidate', connection: 'keep-alive', 'x-accel-buffering': 'no' } });
+}
+function validateTunnelTarget(value: unknown): string {
+  if (typeof value !== "string" || !value.trim()) throw new Error("Service URL is required");
+  let target: URL;
+  try { target = new URL(value.trim()); } catch { throw new Error("Enter a valid service URL, such as http://127.0.0.1:5173"); }
+  if (target.protocol !== "http:" && target.protocol !== "https:") throw new Error("Only HTTP and HTTPS service URLs are supported");
+  if (target.username || target.password || target.search || target.hash) throw new Error("Service URL must not include credentials, query, or fragment");
+  if (!["localhost", "127.0.0.1", "[::1]", "::1"].includes(target.hostname)) throw new Error("Quick Tunnel can only expose a service on localhost or a loopback address");
+  if (target.port && (!/^\d+$/.test(target.port) || Number(target.port) < 1 || Number(target.port) > 65535)) throw new Error("Invalid service port");
+  return target.toString().replace(/\/$/, "");
+}
+function appendTunnelLog(t: TunnelRecord, text: string) {
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    t.logs.push(line);
+    if (t.logs.length > 100) t.logs.splice(0, t.logs.length - 100);
+    const match = line.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/i);
+    if (match && t.status === "starting") {
+      t.publicUrl = match[0];
+      t.status = "active";
+    }
+  }
+  publishTunnelSnapshot();
+}
+async function readTunnelOutput(t: TunnelRecord, stream: ReadableStream<Uint8Array>) {
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let pending = "";
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      pending += decoder.decode(value, { stream: true });
+      const lines = pending.split(/\r?\n/);
+      pending = lines.pop() ?? "";
+      appendTunnelLog(t, lines.join("\n"));
+    }
+    pending += decoder.decode();
+    appendTunnelLog(t, pending);
+  } catch (error) {
+    if (t.status !== "stopping" && t.status !== "stopped") {
+      t.logs.push("Output stream closed: " + (error instanceof Error ? error.message : "unknown error"));
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+async function startQuickTunnel(targetUrl: string): Promise<TunnelRecord> {
+  const id = randomUUID();
+  const record: TunnelRecord = {
+    id, targetUrl, status: "starting", publicUrl: null, createdAt: new Date().toISOString(),
+    logs: [], error: null, process: null,
+  };
+  let child: ReturnType<typeof Bun.spawn>;
+  try {
+    child = Bun.spawn(["cloudflared", "tunnel", "--no-autoupdate", "--url", targetUrl], {
+      stdout: "pipe", stderr: "pipe",
+    });
+  } catch {
+    throw new Error("Unable to start cloudflared. Install cloudflared and ensure it is available in PATH.");
+  }
+  record.process = child;
+  tunnels.set(id, record);
+  publishTunnelSnapshot();
+  void readTunnelOutput(record, child.stdout);
+  void readTunnelOutput(record, child.stderr);
+  void child.exited.then((code) => {
+    if (record.status === "stopping") record.status = "stopped";
+    else if (code === 0 && record.status !== "error") record.status = "stopped";
+    else if (record.status !== "stopped") {
+      record.status = "error";
+      record.error = code === 0 ? "Tunnel process exited" : "cloudflared exited with code " + code;
+      record.logs.push(record.error);
+    }
+    record.process = null;
+    publishTunnelSnapshot();
+  }).catch((error) => {
+    record.status = "error";
+    record.error = error instanceof Error ? error.message : "Tunnel process failed";
+    record.process = null;
+    publishTunnelSnapshot();
+  });
+  return record;
+}
+async function stopTunnel(record: TunnelRecord): Promise<void> {
+  const child = record.process;
+  if (!child || record.status === "stopped" || record.status === "error") return;
+  record.status = "stopping";
+  publishTunnelSnapshot();
+
+  const waitForExit = (timeoutMs: number) => Promise.race([
+    child.exited.then(() => true),
+    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), timeoutMs)),
+  ]);
+
+  try { child.kill("SIGTERM"); } catch {}
+  let exited = await waitForExit(2500);
+  if (!exited) {
+    try { child.kill("SIGKILL"); } catch {}
+    exited = await waitForExit(2500);
+  }
+
+  if (exited) {
+    record.status = "stopped";
+    record.process = null;
+  } else {
+    record.status = "error";
+    record.error = "cloudflared did not exit after SIGTERM and SIGKILL";
+    record.logs.push(record.error);
+  }
+  publishTunnelSnapshot();
+}
+
 const server = Bun.serve({
   hostname: process.env.OMP_CONTROL_HOST ?? "127.0.0.1",
   port,
@@ -263,6 +424,40 @@ const server = Bun.serve({
         return authSend({ authenticated: false }, sessionCookie("", 0, requestUsesHttps(req)));
       }
       if (!url.pathname.startsWith("/control/v1/auth/") && !authenticated(req)) return fail("UNAUTHENTICATED", "Please log in to continue", 401);
+
+
+      if (url.pathname === "/control/v1/tunnels/status" && req.method === "GET") {
+        const executable = Bun.which("cloudflared");
+        if (!executable) return send({ installed: false, path: null, version: null });
+        let version: string | null = null;
+        try {
+          const result = Bun.spawnSync([executable, "--version"], { stdout: "pipe", stderr: "pipe", timeout: 3000 });
+          const output = new TextDecoder().decode(result.stdout).trim() || new TextDecoder().decode(result.stderr).trim();
+          if (result.exitCode === 0 && output) version = output.split("\n")[0];
+        } catch {}
+        return send({ installed: true, path: executable, version });
+      }
+      if (url.pathname === "/control/v1/tunnels/events" && req.method === "GET") return tunnelEventsResponse();
+      if (url.pathname === "/control/v1/tunnels" && req.method === "GET") {
+        return send({ tunnels: tunnelSnapshot() });
+      }
+      if (url.pathname === "/control/v1/tunnels" && req.method === "POST") {
+        const body = await readJson(req);
+        const targetUrl = validateTunnelTarget(body.targetUrl);
+        try {
+          const tunnel = await startQuickTunnel(targetUrl);
+          return send({ tunnel: publicTunnel(tunnel) }, 201);
+        } catch (error) {
+          return fail("CLOUDFLARED_UNAVAILABLE", error instanceof Error ? error.message : "Unable to start cloudflared", 503);
+        }
+      }
+      const tunnelMatch = url.pathname.match(/^\/control\/v1\/tunnels\/([^/]+)\/(stop)$/);
+      if (tunnelMatch && req.method === "POST") {
+        const tunnel = tunnels.get(decodeURIComponent(tunnelMatch[1]));
+        if (!tunnel) return fail("NOT_FOUND", "Tunnel not found", 404);
+        await stopTunnel(tunnel);
+        return send({ tunnel: publicTunnel(tunnel) });
+      }
 
       const runtimeMatch = url.pathname.match(/^\/control\/v1\/instances\/([^/]+)\/runtime(\/.*)$/);
       if (runtimeMatch && runtimeMatch[2] === "/api/terminal/socket" && req.headers.get("upgrade")?.toLowerCase() === "websocket") {

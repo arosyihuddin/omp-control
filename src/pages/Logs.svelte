@@ -16,6 +16,10 @@
   let search = $state('');
   let status = $state<StatusFilter>('all');
   let expandedId = $state('');
+  let loadMoreSentinel = $state<HTMLDivElement>();
+  let loadingMore = $state(false);
+  let hasMore = $state(true);
+  let limit = $state(200);
 
   const filtered = $derived.by(() => {
     const query = search.trim().toLowerCase();
@@ -26,11 +30,37 @@
     );
   });
 
+  const groupedLogs = $derived.by(() => {
+    const groups: { date: string; label: string; logs: ToolCallLog[] }[] = [];
+    const byDate = new Map<string, { date: string; label: string; logs: ToolCallLog[] }>();
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+    const dateKey = (value: Date) => `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
+    const todayKey = dateKey(today);
+    const yesterdayKey = dateKey(yesterday);
+    for (const log of filtered) {
+      const date = new Date(log.timestamp);
+      if (Number.isNaN(date.getTime())) continue;
+      const key = dateKey(date);
+      let group = byDate.get(key);
+      if (!group) {
+        const label = key === todayKey ? 'Today' : key === yesterdayKey ? 'Yesterday' : date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+        group = { date: key, label, logs: [] };
+        byDate.set(key, group);
+        groups.push(group);
+      }
+      group.logs.push(log);
+    }
+    return groups;
+  });
+
   async function load() {
     loading = true;
     error = '';
     try {
-      logs = await logsApi.list();
+      logs = await logsApi.list(limit);
+      hasMore = logs.length >= limit;
     } catch (err) {
       error = errorMessage(err, 'Unable to load logs');
     } finally {
@@ -38,9 +68,40 @@
     }
   }
 
+  async function loadMore() {
+    if (loading || loadingMore || !hasMore) return;
+    loadingMore = true;
+    const nextLimit = limit + 100;
+    try {
+      const nextLogs = await logsApi.list(nextLimit);
+      if (nextLogs.length <= logs.length) {
+        hasMore = false;
+      } else {
+        logs = nextLogs;
+        limit = nextLimit;
+        hasMore = nextLogs.length >= nextLimit;
+      }
+    } catch (err) {
+      error = errorMessage(err, 'Unable to load more logs');
+    } finally {
+      loadingMore = false;
+    }
+  }
+
   onMount(() => {
     void load();
     return onServerEvent('tool_call.created', () => void load());
+  });
+
+  $effect(() => {
+    const sentinel = loadMoreSentinel;
+    if (!sentinel || !hasMore || loadingMore) return;
+    const root = sentinel.closest('.overflow-y-auto');
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) void loadMore();
+    }, { root, rootMargin: '300px 0px' });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
   });
 </script>
 
@@ -66,10 +127,28 @@
   {:else if filtered.length === 0}
     <EmptyState icon={ScrollText} title="No tool calls found" description="Tool calls made through the MCP server will appear here." />
   {:else}
-    <div class="divide-y divide-line">
-      {#each filtered as log (log.id)}
-        <LogRow {log} expanded={expandedId === log.id} ontoggle={() => (expandedId = expandedId === log.id ? '' : log.id)} />
+    <div>
+      {#each groupedLogs as group (group.date)}
+        <section aria-label={group.label}>
+          <div class="sticky top-0 z-10 flex items-center gap-3 border-y border-line bg-surface/95 px-4 py-2.5 backdrop-blur">
+            <span class="text-xs font-semibold text-fg">{group.label}</span>
+            <span class="text-xs text-fg-faint">{group.logs[0] ? new Date(group.logs[0].timestamp).toLocaleDateString() : group.date}</span>
+            <span class="ml-auto text-xs tabular-nums text-fg-faint">{group.logs.length} {group.logs.length === 1 ? 'tool call' : 'tool calls'}</span>
+          </div>
+          <div class="divide-y divide-line">
+            {#each group.logs as log (log.id)}
+              <LogRow {log} expanded={expandedId === log.id} ontoggle={() => (expandedId = expandedId === log.id ? '' : log.id)} />
+            {/each}
+          </div>
+        </section>
       {/each}
     </div>
+  {/if}
+  {#if !loading && hasMore}
+    <div bind:this={loadMoreSentinel} class="flex min-h-12 items-center justify-center border-t border-line px-4 py-3 text-xs text-fg-muted" aria-live="polite">
+      {#if loadingMore}Loading more tool calls…{:else}Scroll for more{/if}
+    </div>
+  {:else if !hasMore && logs.length > 0}
+    <p class="border-t border-line px-4 py-3 text-center text-xs text-fg-faint">All available tool calls loaded</p>
   {/if}
 </Panel>
