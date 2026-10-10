@@ -38,7 +38,7 @@
       onclick={toggle}
     >
       <span class="relative shrink-0">
-        <Avatar {name} color={profile.data?.avatarColor} />
+        <Avatar {name} color={profile.data?.avatarColor} class="ring-2 ring-accent/70 ring-offset-1 ring-offset-surface" />
       </span>
       {#if !compact}
         <span class={['min-w-0', collapsed && 'md:hidden']}>
@@ -51,7 +51,7 @@
   {#snippet children({ close })}
     <div class="mb-1 border-b border-line px-3 pb-3 pt-2" role="presentation">
       <div class="flex min-w-0 items-center gap-2.5">
-        <Avatar {name} color={profile.data?.avatarColor} />
+        <Avatar {name} color={profile.data?.avatarColor} class="ring-2 ring-accent/70 ring-offset-1 ring-offset-surface" />
         <div class="min-w-0 flex-1">
           <div class="truncate text-sm font-medium text-fg">{name}</div>
           <div class="truncate text-xs text-fg-subtle">{profile.data?.role ?? 'User'}</div>
