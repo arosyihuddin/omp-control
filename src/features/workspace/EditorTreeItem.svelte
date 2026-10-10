@@ -22,17 +22,8 @@
   const visibleChildren = $derived(children
     .toSorted((a, b) => a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'directory' ? -1 : 1));
 
-  async function activate() {
-    if (item.type !== 'directory') {
-      onOpen(path, false);
-      return;
-    }
-    if (expanded) {
-      expanded = false;
-      return;
-    }
-    expanded = true;
-    if (children.length > 0 || loadError) return;
+  async function loadChildren() {
+    if (children.length > 0 || loading || loadError) return;
     loading = true;
     loadError = '';
     try {
@@ -44,8 +35,28 @@
       loading = false;
     }
   }
-</script>
 
+  $effect(() => {
+    if (item.type === 'directory' && activePath.startsWith(path + '/') && !expanded) {
+      expanded = true;
+      void loadChildren();
+    }
+  });
+
+  async function activate() {
+    if (item.type !== 'directory') {
+      onOpen(path, false);
+      return;
+    }
+    if (expanded) {
+      expanded = false;
+      return;
+    }
+    expanded = true;
+    await loadChildren();
+  }
+
+</script>
 <button
   class={['flex min-h-8 w-full items-center gap-2 rounded-md pr-2 text-left transition-colors', activePath === path ? 'bg-surface-active text-fg' : 'text-fg-muted hover:bg-surface-hover hover:text-fg']}
   style={'padding-left: ' + (8 + depth * 14) + 'px'}

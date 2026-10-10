@@ -25,10 +25,9 @@
       memoryGiB: memoryUsedGiB,
       gpu: gpu?.utilization_gpu_percent == null ? null : Math.max(0, Math.min(100, gpu.utilization_gpu_percent)),
     };
-    const previous = untrack(() => resourceHistory.at(-1));
-    if (previous && previous.cpu === sample.cpu && previous.memoryGiB === sample.memoryGiB && previous.gpu === sample.gpu) return;
     resourceHistory = [...untrack(() => resourceHistory).slice(-59), sample];
   });
+  const timeAt = (position: number) => resourceHistory[Math.round((resourceHistory.length - 1) * position)]?.time ?? '—';
   const linePoints = (key: 'cpu' | 'memoryGiB' | 'gpu', max = 100) => resourceHistory
     .map((sample, index) => sample[key] == null ? null : `${16 + (resourceHistory.length < 2 ? 0 : index / (resourceHistory.length - 1) * 294)},${14 + (1 - Math.max(0, Math.min(max, sample[key] ?? 0)) / max) * 102}`)
     .filter((point): point is string => point !== null).join(' ');
@@ -74,38 +73,38 @@
       <div class="min-w-0 rounded-xl border border-line bg-surface-raised p-4 shadow-card sm:p-5">
         <div class="flex items-start justify-between gap-3"><div><h2 class="text-sm font-semibold text-fg">CPU utilization</h2><p class="mt-1 text-xs text-fg-subtle">Recent host CPU usage</p></div><span class="rounded-md border border-line bg-surface px-2 py-1 text-xs text-fg-faint">{system.cpu?.logical_cores ?? '—'} cores</span></div>
         <div class="mt-3">
-          <svg viewBox="0 0 320 180" preserveAspectRatio="xMidYMid meet" class="h-48 w-full sm:h-56" role="img" aria-label="CPU utilization line chart, percentage over time">
+          <svg viewBox="0 0 320 190" preserveAspectRatio="xMidYMid meet" class="h-48 w-full sm:h-56" role="img" aria-label="CPU utilization line chart, percentage over time">
             {#each [100, 75, 50, 25, 0] as tick, i}<line x1="16" x2="310" y1={18 + i * 33} y2={18 + i * 33} stroke="currentColor" stroke-opacity="0.12" stroke-width="1" /><text x="4" y={22 + i * 33} text-anchor="end" font-size="10" fill="currentColor" opacity="0.7">{tick}%</text>{/each}
             <line x1="16" x2="16" y1="18" y2="150" stroke="currentColor" stroke-opacity="0.3" /><line x1="16" x2="310" y1="150" y2="150" stroke="currentColor" stroke-opacity="0.3" />
+            <text x="16" y="169" text-anchor="start" font-size="9" fill="currentColor" opacity="0.65">{timeAt(0)}</text><text x="163" y="169" text-anchor="middle" font-size="9" fill="currentColor" opacity="0.65">{timeAt(0.5)}</text><text x="310" y="169" text-anchor="end" font-size="9" fill="currentColor" opacity="0.65">{timeAt(1)}</text>
             {#if resourceHistory.length > 1}<polyline points={linePoints('cpu')} fill="none" stroke="#60a5fa" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />{/if}
           </svg>
         </div>
-        <div class="mt-2 flex items-center justify-between text-xs text-fg-faint"><span>{resourceHistory[0]?.time ?? 'Waiting for telemetry'}</span><span>{resourceHistory.at(-1)?.time ?? '—'}</span></div>
         <div class="mt-3 flex items-baseline justify-between"><span class="text-sm text-fg-subtle">Current CPU</span><span class="text-lg font-semibold tabular-nums text-fg">{latest('cpu') == null ? '—' : `${latest('cpu')!.toFixed(1)}%`}</span></div>
       </div>
       <div class="min-w-0 rounded-xl border border-line bg-surface-raised p-4 shadow-card sm:p-5">
         <div class="flex items-start justify-between gap-3"><div><h2 class="text-sm font-semibold text-fg">Memory (RAM)</h2><p class="mt-1 text-xs text-fg-subtle">Used memory over time</p></div><span class="rounded-md border border-line bg-surface px-2 py-1 text-xs text-fg-faint">{memoryTotalGiB == null ? '—' : `${memoryTotalGiB.toFixed(1)} GiB total`}</span></div>
         <div class="mt-3">
-          <svg viewBox="0 0 320 180" preserveAspectRatio="xMidYMid meet" class="h-48 w-full sm:h-56" role="img" aria-label="RAM usage line chart, GiB over time">
+          <svg viewBox="0 0 320 190" preserveAspectRatio="xMidYMid meet" class="h-48 w-full sm:h-56" role="img" aria-label="RAM usage line chart, GiB over time">
             {#each [100, 75, 50, 25, 0] as tick, i}<line x1="16" x2="310" y1={18 + i * 33} y2={18 + i * 33} stroke="currentColor" stroke-opacity="0.12" stroke-width="1" /><text x="4" y={22 + i * 33} text-anchor="end" font-size="10" fill="currentColor" opacity="0.7">{memoryTotalGiB == null ? '—' : (memoryTotalGiB * tick / 100).toFixed(0)}</text>{/each}
             <text x="16" y="10" font-size="10" fill="currentColor" opacity="0.65">GiB</text>
             <line x1="16" x2="16" y1="18" y2="150" stroke="currentColor" stroke-opacity="0.3" /><line x1="16" x2="310" y1="150" y2="150" stroke="currentColor" stroke-opacity="0.3" />
+            <text x="16" y="169" text-anchor="start" font-size="9" fill="currentColor" opacity="0.65">{timeAt(0)}</text><text x="163" y="169" text-anchor="middle" font-size="9" fill="currentColor" opacity="0.65">{timeAt(0.5)}</text><text x="310" y="169" text-anchor="end" font-size="9" fill="currentColor" opacity="0.65">{timeAt(1)}</text>
             {#if resourceHistory.length > 1 && memoryTotalGiB != null}<polyline points={linePoints('memoryGiB', memoryTotalGiB)} fill="none" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />{/if}
           </svg>
         </div>
-        <div class="mt-2 flex items-center justify-between text-xs text-fg-faint"><span>{resourceHistory[0]?.time ?? 'Waiting for telemetry'}</span><span>{resourceHistory.at(-1)?.time ?? '—'}</span></div>
         <div class="mt-3 flex items-baseline justify-between"><span class="text-sm text-fg-subtle">RAM used</span><span class="text-lg font-semibold tabular-nums text-fg">{latest('memoryGiB') == null ? '—' : `${latest('memoryGiB')!.toFixed(1)} GiB`}</span></div>
       </div>
       <div class="min-w-0 rounded-xl border border-line bg-surface-raised p-4 shadow-card sm:p-5">
         <div class="flex items-start justify-between gap-3"><div><h2 class="text-sm font-semibold text-fg">GPU utilization</h2><p class="mt-1 text-xs text-fg-subtle">Recent GPU compute usage</p></div><span class="max-w-36 truncate rounded-md border border-line bg-surface px-2 py-1 text-xs text-fg-faint">{gpu?.name ?? (gpu ? 'GPU detected' : 'Unavailable')}</span></div>
         <div class="mt-3">
-          <svg viewBox="0 0 320 180" preserveAspectRatio="xMidYMid meet" class="h-48 w-full sm:h-56" role="img" aria-label="GPU utilization line chart, percentage over time">
+          <svg viewBox="0 0 320 190" preserveAspectRatio="xMidYMid meet" class="h-48 w-full sm:h-56" role="img" aria-label="GPU utilization line chart, percentage over time">
             {#each [100, 75, 50, 25, 0] as tick, i}<line x1="16" x2="310" y1={18 + i * 33} y2={18 + i * 33} stroke="currentColor" stroke-opacity="0.12" stroke-width="1" /><text x="4" y={22 + i * 33} text-anchor="end" font-size="10" fill="currentColor" opacity="0.7">{tick}%</text>{/each}
             <line x1="16" x2="16" y1="18" y2="150" stroke="currentColor" stroke-opacity="0.3" /><line x1="16" x2="310" y1="150" y2="150" stroke="currentColor" stroke-opacity="0.3" />
+            <text x="16" y="169" text-anchor="start" font-size="9" fill="currentColor" opacity="0.65">{timeAt(0)}</text><text x="163" y="169" text-anchor="middle" font-size="9" fill="currentColor" opacity="0.65">{timeAt(0.5)}</text><text x="310" y="169" text-anchor="end" font-size="9" fill="currentColor" opacity="0.65">{timeAt(1)}</text>
             {#if resourceHistory.length > 1 && gpu}<polyline points={linePoints('gpu')} fill="none" stroke="#fbbf24" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />{/if}
           </svg>
         </div>
-        <div class="mt-2 flex items-center justify-between text-xs text-fg-faint"><span>{resourceHistory[0]?.time ?? 'Waiting for telemetry'}</span><span>{resourceHistory.at(-1)?.time ?? '—'}</span></div>
         <div class="mt-3 flex items-baseline justify-between"><span class="text-sm text-fg-subtle">Current GPU</span><span class="text-lg font-semibold tabular-nums text-fg">{latest('gpu') == null ? '—' : `${latest('gpu')!.toFixed(1)}%`}</span></div>
       </div>
     </section>

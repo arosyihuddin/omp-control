@@ -24,9 +24,27 @@
   let showHidden = $state(true);
   let filter = $state('');
   let terminalOpen = $state(false);
-  let terminalSessionsOpen = $state(true);
+  let terminalHeight = $state(320);
+  let resizingTerminal = $state(false);
+  let terminalResizeStartY = 0;
+  let terminalResizeStartHeight = 320;
   const terminalController = new TerminalController({ scope: 'project', getWorkspaceRoot: () => editor.root });
   let terminalViewport = $state<ReturnType<typeof TerminalViewport>>();
+  let terminalInitPromise: Promise<void> | undefined;
+
+  async function showTerminal(createNew = false) {
+    terminalOpen = true;
+    if (terminalInitPromise) await terminalInitPromise;
+    if (createNew || terminalController.terminals.length === 0) {
+      if (!terminalController.creating) await terminalController.create();
+    }
+    requestAnimationFrame(() => terminalViewport?.focus());
+  }
+
+  async function closeTerminal(id: string) {
+    await terminalController.close(id);
+    if (terminalController.terminals.length === 0) terminalOpen = false;
+  }
 
   const visibleItems = $derived(editor.items
     .filter((item) => (showHidden || !isHidden(item.name)) && item.name.toLowerCase().includes(filter.trim().toLowerCase()))
@@ -42,7 +60,8 @@
   });
   onMount(() => {
     terminalController.attach({ write: (data) => terminalViewport?.write(data), reset: () => terminalViewport?.reset(), focus: () => terminalViewport?.focus(), refit: () => terminalViewport?.refit() });
-    void terminalController.init();
+    terminalInitPromise = terminalController.init();
+    void terminalInitPromise;
     return () => terminalController.dispose();
   });
 
@@ -90,6 +109,28 @@
   function stopSidebarResize() {
     resizingSidebar = false;
     window.removeEventListener('pointermove', resizeSidebar);
+  }
+
+  function startTerminalResize(event: PointerEvent) {
+    if (!terminalOpen || event.button !== 0) return;
+    event.preventDefault();
+    resizingTerminal = true;
+    terminalResizeStartY = event.clientY;
+    terminalResizeStartHeight = terminalHeight;
+    window.addEventListener('pointermove', resizeTerminal);
+    window.addEventListener('pointerup', stopTerminalResize, { once: true });
+  }
+
+  function resizeTerminal(event: PointerEvent) {
+    if (!resizingTerminal) return;
+    terminalHeight = Math.min(Math.floor(window.innerHeight * 0.75), Math.max(176, terminalResizeStartHeight + terminalResizeStartY - event.clientY));
+    requestAnimationFrame(() => terminalViewport?.refit());
+  }
+
+  function stopTerminalResize() {
+    resizingTerminal = false;
+    window.removeEventListener('pointermove', resizeTerminal);
+    requestAnimationFrame(() => terminalViewport?.refit());
   }
 
   function toggleFullscreen() {
@@ -157,10 +198,11 @@
     const mod = event.metaKey || event.ctrlKey;
     if (mod && event.code === 'Backquote' && !event.shiftKey) {
       event.preventDefault();
-      terminalOpen = !terminalOpen;
-      if (terminalOpen) requestAnimationFrame(() => terminalViewport?.focus());
+      if (terminalOpen) terminalOpen = false;
+      else void showTerminal();
     } else if (mod && event.shiftKey && event.code === 'Backquote') {
-      event.preventDefault(); terminalOpen = true; void terminalController.create(); requestAnimationFrame(() => terminalViewport?.focus());
+      event.preventDefault();
+      void showTerminal(true);
     } else if (mod && event.key.toLowerCase() === 's') {
       event.preventDefault();
       if (event.shiftKey) void editor.saveAll();
@@ -209,7 +251,7 @@
       {/if}
       <IconButton label={editor.saving ? 'Saving…' : 'Save'} size="sm" disabled={!editor.activeDirty || editor.saving} onclick={() => void editor.save()}><Save size={15} /></IconButton>
       <div class="mx-1 h-5 w-px bg-line"></div>
-      <IconButton label={terminalOpen ? 'Hide terminal' : 'Show terminal'} size="sm" onclick={() => { terminalOpen = !terminalOpen; if (terminalOpen) requestAnimationFrame(() => terminalViewport?.focus()); }}><TerminalIcon size={15} /></IconButton>
+      <IconButton label={terminalOpen ? 'Hide terminal' : 'Show terminal'} size="sm" onclick={() => { if (terminalOpen) terminalOpen = false; else void showTerminal(); }}><TerminalIcon size={15} /></IconButton>
       <IconButton label={fullscreen ? 'Exit fullscreen' : 'Fullscreen'} size="sm" onclick={toggleFullscreen}>{#if fullscreen}<Minimize2 size={15} />{:else}<Maximize2 size={15} />{/if}</IconButton>
     </div>
 
@@ -259,7 +301,12 @@
       </div>
     {/if}
 
-    <section class="flex min-w-0 flex-1 flex-col">
+    <section class="relative flex min-w-0 flex-1 flex-col">
+      <section class={['absolute inset-x-0 bottom-0 z-20 flex-col overflow-hidden border-t border-line bg-surface shadow-card', terminalOpen ? 'flex' : 'hidden']} style={terminalOpen ? `height: ${terminalHeight}px` : undefined}>
+        <div role="separator" aria-orientation="horizontal" aria-label="Resize terminal panel" title="Drag to resize terminal" class="group relative z-10 h-1 shrink-0 cursor-row-resize touch-none bg-transparent hover:bg-accent/40 active:bg-accent/60" onpointerdown={startTerminalResize}><span class="absolute inset-x-0 -top-1 -bottom-1"></span></div>
+        <header class="flex h-9 shrink-0 items-center justify-between border-b border-line px-2.5"><div class="flex items-center gap-2 text-xs font-medium text-fg-muted"><TerminalIcon size={14} /> Terminal <span class="text-fg-faint">({terminalController.terminals.length})</span></div><div class="flex items-center gap-1"><IconButton label="New terminal" size="sm" disabled={terminalController.creating} onclick={() => void terminalController.create()}><Plus size={14} /></IconButton><IconButton label="Hide terminal" size="sm" onclick={() => (terminalOpen = false)}><X size={14} /></IconButton></div></header>
+        <div class="flex min-h-0 flex-1"><div class="relative min-w-0 flex-1"><TerminalViewport bind:this={terminalViewport} ondata={terminalController.sendInput} onresize={terminalController.sendResize} />{#if !terminalController.active && !terminalController.loading}<div class="absolute inset-0 flex items-center justify-center bg-surface text-sm text-fg-subtle">No active terminal</div>{/if}{#if terminalController.error}<button type="button" class="absolute inset-x-3 bottom-3 rounded-md border border-line bg-surface-raised px-3 py-2 text-left text-xs text-danger shadow-card" onclick={() => (terminalController.error = '')}>{terminalController.error}</button>{/if}</div><TerminalSessions terminals={terminalController.terminals} activeId={terminalController.activeId} loading={terminalController.loading} onopen={(id) => terminalController.open(id)} onclose={(id) => void closeTerminal(id)} /></div>
+      </section>
       {#if editor.tabs.length > 0}
         <div class="flex h-10 min-w-0 items-stretch overflow-x-auto border-b border-line bg-surface">
           {#each editor.tabs as tab (tab.path)}
@@ -315,15 +362,12 @@
           </EmptyState>
         </div>
       {/if}
-      <section class={[terminalOpen ? 'flex h-[min(38vh,320px)] min-h-44 border-t' : 'flex h-0 min-h-0 overflow-hidden border-t-0', 'shrink-0 flex-col bg-surface transition-[height] duration-200']}>
-          <header class="flex h-9 shrink-0 items-center justify-between border-b border-line px-2.5"><div class="flex items-center gap-2 text-xs font-medium text-fg-muted"><TerminalIcon size={14} /> Terminal <span class="text-fg-faint">({terminalController.terminals.length})</span></div><div class="flex items-center gap-1"><span class="mr-1 text-[10px] text-fg-faint">{terminalController.socketState === 'connected' ? 'Connected' : terminalController.socketState === 'connecting' ? 'Connecting…' : 'Disconnected'}</span><IconButton label="New terminal" size="sm" disabled={terminalController.creating} onclick={() => void terminalController.create()}><Plus size={14} /></IconButton><IconButton label="Hide terminal" size="sm" onclick={() => (terminalOpen = false)}><X size={14} /></IconButton></div></header>
-          <div class="flex min-h-0 flex-1"><TerminalSessions terminals={terminalController.terminals} activeId={terminalController.activeId} loading={terminalController.loading} open={terminalSessionsOpen} oncreate={() => void terminalController.create()} onopen={(id) => terminalController.open(id)} onclose={(id) => void terminalController.close(id)} ontoggle={() => (terminalSessionsOpen = !terminalSessionsOpen)} /><div class="relative min-w-0 flex-1"><TerminalViewport bind:this={terminalViewport} ondata={terminalController.sendInput} onresize={terminalController.sendResize} />{#if !terminalController.active && !terminalController.loading}<div class="absolute inset-0 flex items-center justify-center bg-surface text-sm text-fg-subtle"><button type="button" class="rounded-md border border-line px-3 py-2 hover:bg-surface-hover" onclick={() => void terminalController.create()}>Create terminal session</button></div>{/if}{#if terminalController.error}<button type="button" class="absolute inset-x-3 bottom-3 rounded-md border border-line bg-surface-raised px-3 py-2 text-left text-xs text-danger shadow-card" onclick={() => (terminalController.error = '')}>{terminalController.error}</button>{/if}</div></div>
-      </section>
+
     </section>
   </div>
 </div>
 
-<CommandPalette open={commandOpen} root={editor.root || '.'} onclose={() => (commandOpen = false)} onselectfile={(path) => { commandOpen = false; void editor.openFile(path); }} onaction={(action) => { commandOpen = false; if (action === 'open-file') openPicker('file'); else if (action === 'open-folder') openPicker('directory'); else if (action === 'save') void editor.save(); else if (action === 'save-all') void editor.saveAll(); else if (action === 'toggle-explorer') showTree = !showTree; else if (action === 'fullscreen') toggleFullscreen(); else if (action === 'refresh') void editor.loadDir(editor.dir); else if (action === 'toggle-terminal') { terminalOpen = !terminalOpen; } else if (action === 'new-terminal') { terminalOpen = true; void terminalController.create(); } }} />
+<CommandPalette open={commandOpen} root={editor.root || '.'} onclose={() => (commandOpen = false)} onselectfile={(path) => { commandOpen = false; void editor.openFile(path); }} onaction={(action) => { commandOpen = false; if (action === 'open-file') openPicker('file'); else if (action === 'open-folder') openPicker('directory'); else if (action === 'save') void editor.save(); else if (action === 'save-all') void editor.saveAll(); else if (action === 'toggle-explorer') showTree = !showTree; else if (action === 'fullscreen') toggleFullscreen(); else if (action === 'refresh') void editor.loadDir(editor.dir); else if (action === 'toggle-terminal') { if (terminalOpen) terminalOpen = false; else void showTerminal(); } else if (action === 'new-terminal') { void showTerminal(true); } }} />
 <PathPicker open={pickerOpen} mode={pickerMode} initialPath={editor.root || '.'} onselect={pickPath} oncancel={() => (pickerOpen = false)} />
 
 <Modal open={closeProjectOpen} title="Close project?" width="max-w-md" onclose={() => (closeProjectOpen = false)}>

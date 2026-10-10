@@ -2,7 +2,7 @@ import { errorMessage, workspaceApi, workspaceStateApi } from '$lib/api';
 import type { WorkspaceItem } from '$lib/types';
 import { basename, dirname } from './file-utils';
 import { prefs } from './preferences.svelte';
-import { readString, storageKeys, writeString } from '$lib/utils/storage';
+import { readJson, readString, storageKeys, writeJson, writeString } from '$lib/utils/storage';
 
 export interface EditorTab {
   path: string;
@@ -66,14 +66,23 @@ class EditorStore {
   async restoreSession(root: string) {
     if (this.sessionRoot === root) return;
     this.sessionRoot = root;
+    const localSession = readJson<{ tabs: string[]; activePath: string | null } | null>('omp-editor-session:' + root, null);
     try {
       const session = await workspaceStateApi.getEditorSession(root);
-      if (!session) return;
+      const tabs = session?.tabs?.length ? session.tabs : (localSession?.tabs ?? []);
+      const activePath = session?.activePath ?? localSession?.activePath ?? null;
       const previewPath = readString('omp-editor-preview:' + root);
-      for (const path of session.tabs) await this.openFile(path, undefined, path === previewPath, false);
-      if (session.activePath && this.tabs.some((tab) => tab.path === session.activePath)) this.activePath = session.activePath;
+      for (const path of tabs) await this.openFile(path, undefined, path === previewPath, false);
+      if (activePath && this.tabs.some((tab) => tab.path === activePath)) this.activePath = activePath;
+      else if (!this.activePath && this.tabs.length) this.activePath = this.tabs[0].path;
+      this.scheduleSessionSave();
     } catch {
-      // Session restore is best-effort; the editor remains usable when persistence is unavailable.
+      // Restore from the local snapshot if server-side session persistence is unavailable.
+      const previewPath = readString('omp-editor-preview:' + root);
+      for (const path of localSession?.tabs ?? []) await this.openFile(path, undefined, path === previewPath, false);
+      if (localSession?.activePath && this.tabs.some((tab) => tab.path === localSession.activePath)) this.activePath = localSession.activePath;
+      else if (!this.activePath && this.tabs.length) this.activePath = this.tabs[0].path;
+      this.scheduleSessionSave();
     }
   }
 
@@ -81,7 +90,10 @@ class EditorStore {
     const existing = this.tabs.find((tab) => tab.path === path);
     if (existing) {
       existing.preview = existing.preview && preview;
-      if (focus) this.activePath = path;
+      if (focus) {
+        this.activePath = path;
+        this.scheduleSessionSave();
+      }
       return;
     }
     this.loading = true;
@@ -203,9 +215,11 @@ class EditorStore {
     const tabs = this.tabs.map((tab) => tab.path);
     const activePath = this.activePath || null;
     const previewPath = this.tabs.find((tab) => tab.preview)?.path ?? '';
+    const snapshot = { tabs, activePath };
+    writeJson('omp-editor-session:' + root, snapshot);
+    writeString('omp-editor-preview:' + root, previewPath);
     clearTimeout(this.saveTimer);
     this.saveTimer = setTimeout(() => {
-      writeString('omp-editor-preview:' + root, previewPath);
       void workspaceStateApi.saveEditorSession(root, tabs, activePath).catch(() => {});
     }, 500);
   }
