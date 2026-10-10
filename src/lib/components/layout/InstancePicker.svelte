@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { ArrowLeft, ArrowRight, Check, CircleAlert, EllipsisVertical, LogOut, Pencil, Plus, Server, Settings2, Trash2 } from '@lucide/svelte';
+  import { Activity, ArrowLeft, ArrowRight, Check, CircleAlert, EllipsisVertical, LogOut, Pencil, Plus, Server, Settings2, Trash2 } from '@lucide/svelte';
   import { Avatar, Modal, ConfirmDialog, Skeleton } from '$lib/components/ui';
   import { profile } from '$lib/stores/profile.svelte';
   import ProfileModal from './ProfileModal.svelte';
@@ -21,6 +21,7 @@
   let saving = $state(false);
   let actionError = $state('');
   let refreshing = $state(false);
+  let checkingHealth = $state<string | null>(null);
   let error = $state('');
   let creating = $state(false);
   let createName = $state('');
@@ -84,6 +85,22 @@
     } catch (e) {
       error = e instanceof Error ? e.message : 'Unable to remove instance';
       toast.error('Could not remove instance', error);
+    }
+  }
+
+  async function checkHealth(instance: Instance) {
+    openMenuId = null;
+    checkingHealth = instance.id;
+    try {
+      const result = await instancesApi.health(instance.id);
+      await instanceRegistry.load();
+      if (result.status === 'online') toast.success(instance.name + ' is online', result.latencyMs + ' ms');
+      else toast.info(instance.name + ' health check', result.error ?? 'Status: ' + result.status);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Health check failed';
+      toast.error('Health check failed', message);
+    } finally {
+      checkingHealth = null;
     }
   }
 
@@ -181,6 +198,7 @@
                   <button type="button" class="flex h-8 w-8 items-center justify-center rounded-md text-fg-subtle transition hover:bg-surface-hover hover:text-fg" aria-label={'Actions for ' + instance.name} title="Instance actions" aria-expanded={openMenuId === instance.id} onclick={(event) => { event.stopPropagation(); openMenuId = openMenuId === instance.id ? null : instance.id; }}><EllipsisVertical size={17}/></button>
                   {#if openMenuId === instance.id}
                     <div class="absolute right-0 top-full z-30 mt-1 w-44 rounded-xl border border-line bg-surface p-1.5 shadow-xl">
+                      <button type="button" disabled={checkingHealth === instance.id} class="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm text-fg-subtle transition hover:bg-surface-hover hover:text-fg disabled:opacity-50" onclick={(event) => { event.stopPropagation(); void checkHealth(instance); }}><Activity size={15}/>{checkingHealth === instance.id ? 'Checking health…' : 'Check health'}</button>
                       <button type="button" class="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm text-fg-subtle transition hover:bg-surface-hover hover:text-fg" onclick={(event) => { event.stopPropagation(); openEdit(instance); }}><Pencil size={15}/> Edit instance</button>
                       <button type="button" class="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm text-danger transition hover:bg-danger/10" onclick={(event) => { event.stopPropagation(); void removeInstance(instance); }}><Trash2 size={15}/> Remove instance</button>
                     </div>
