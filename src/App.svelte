@@ -21,6 +21,7 @@
   import Tools from './pages/Tools.svelte';
   import Sessions from './pages/Sessions.svelte';
   import Approvals from './pages/Approvals.svelte';
+  import ToastViewport from '$lib/components/ui/ToastViewport.svelte';
 
 
   import AuthPage from './pages/AuthPage.svelte';
@@ -97,7 +98,7 @@
 </script>
 
 {#if !appReady}
-  <div class="flex h-full items-center justify-center bg-canvas text-fg"><div class="h-6 w-6 animate-spin rounded-full border-2 border-line border-t-accent"></div></div>
+  <div class="flex h-full min-h-screen items-center justify-center bg-canvas p-6"><div class="w-full max-w-3xl space-y-4" aria-label="Loading application" aria-busy="true"><div class="h-8 w-48 animate-pulse rounded bg-surface-active/70"></div><div class="grid grid-cols-1 gap-3 sm:grid-cols-3"><div class="h-24 animate-pulse rounded-xl bg-surface-active/70"></div><div class="h-24 animate-pulse rounded-xl bg-surface-active/70"></div><div class="h-24 animate-pulse rounded-xl bg-surface-active/70"></div></div><div class="h-56 animate-pulse rounded-xl bg-surface-active/70"></div></div></div>
 {:else if !authenticated}
   <AuthPage onAuthenticated={handleAuthenticated} />
 {:else if showInstancePicker || !instanceRegistry.active}
@@ -137,3 +138,4 @@
     {/if}
   </AppShell>
 {/if}
+<ToastViewport />

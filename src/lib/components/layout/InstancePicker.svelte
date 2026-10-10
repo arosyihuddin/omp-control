@@ -1,12 +1,13 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { ArrowLeft, ArrowRight, Check, CircleAlert, EllipsisVertical, LogOut, Pencil, Plus, Server, Settings2, Trash2 } from '@lucide/svelte';
-  import { Avatar, Modal } from '$lib/components/ui';
+  import { Avatar, Modal, ConfirmDialog, Skeleton } from '$lib/components/ui';
   import { profile } from '$lib/stores/profile.svelte';
   import ProfileModal from './ProfileModal.svelte';
   import { instanceRegistry } from '$lib/stores/instances.svelte';
   import { instancesApi } from '$lib/api/instances';
   import type { Instance } from '$lib/api/instances';
+  import { toast } from '$lib/stores/toast.svelte';
 
   interface Props { onenter: () => void; onback?: () => void; }
   let { onenter, onback }: Props = $props();
@@ -27,6 +28,7 @@
   let createCredential = $state('');
   let createSaving = $state(false);
   let createError = $state('');
+  let pendingDelete = $state<Instance | null>(null);
 
   onMount(async () => {
     refreshing = true;
@@ -58,6 +60,7 @@
       await instancesApi.update(editing.id, { name: editName.trim(), baseUrl: editUrl.trim(), ...(editCredential.trim() ? { credential: editCredential.trim() } : {}) });
       editing = null;
       await instanceRegistry.load();
+      toast.success('Instance updated', 'Connection details saved.');
     } catch (e) {
       actionError = e instanceof Error ? e.message : 'Unable to update instance';
     } finally {
@@ -65,14 +68,22 @@
     }
   }
 
-  async function removeInstance(instance: Instance) {
+  function removeInstance(instance: Instance) {
     openMenuId = null;
-    if (!window.confirm('Remove "' + instance.name + '" from this control plane? The remote server will not be changed.')) return;
+    pendingDelete = instance;
+  }
+
+  async function confirmRemoveInstance() {
+    const instance = pendingDelete;
+    if (!instance) return;
+    pendingDelete = null;
     try {
       await instancesApi.remove(instance.id);
       await instanceRegistry.load();
+      toast.success('Instance removed', instance.name + ' was removed from this control plane.');
     } catch (e) {
       error = e instanceof Error ? e.message : 'Unable to remove instance';
+      toast.error('Could not remove instance', error);
     }
   }
 
@@ -95,6 +106,7 @@
       await instancesApi.create({ name: createName.trim(), baseUrl: createUrl.trim(), ...(createCredential.trim() ? { credential: createCredential.trim() } : {}) });
       creating = false;
       await instanceRegistry.load();
+      toast.success('Instance added', createName.trim() + ' is ready to use.');
       if (!hadActiveInstance && instanceRegistry.active) onenter();
     } catch (e) {
       createError = e instanceof Error ? e.message : 'Unable to register instance';
@@ -209,7 +221,7 @@
   </form>
   {#snippet footer()}
     <button type="button" class="h-9 rounded-lg px-3 text-sm text-white/70 hover:bg-white/[0.08] disabled:opacity-50" onclick={() => { if (!saving) editing = null; }} disabled={saving}>Cancel</button>
-    <button type="submit" form="picker-instance-edit" disabled={saving || !editName.trim() || !editUrl.trim()} class="inline-flex h-9 items-center gap-2 rounded-lg bg-[#e1dcc9] px-3 text-sm font-medium text-[#17130e] disabled:opacity-50">{#if saving}<span class="animate-spin">◌</span>{:else}<Check size={15}/>{/if} Save changes</button>
+    <button type="submit" form="picker-instance-edit" disabled={saving || !editName.trim() || !editUrl.trim()} class="inline-flex h-9 items-center gap-2 rounded-lg bg-[#e1dcc9] px-3 text-sm font-medium text-[#17130e] disabled:opacity-50">{#if saving}<Skeleton class="size-4 rounded-full" />{:else}<Check size={15}/>{/if} Save changes</button>
   {/snippet}
 </Modal>
 
@@ -222,6 +234,7 @@
   </form>
   {#snippet footer()}
     <button type="button" class="h-9 rounded-lg px-3 text-sm text-white/70 hover:bg-white/[0.08] disabled:opacity-50" onclick={() => { if (!createSaving) creating = false; }} disabled={createSaving}>Cancel</button>
-    <button type="submit" form="picker-instance-create" disabled={createSaving || !createName.trim() || !createUrl.trim()} class="inline-flex h-9 items-center gap-2 rounded-lg bg-[#e1dcc9] px-3 text-sm font-medium text-[#17130e] disabled:opacity-50">{#if createSaving}<span class="animate-spin">◌</span>{:else}<Plus size={15}/>{/if} Add server</button>
+    <button type="submit" form="picker-instance-create" disabled={createSaving || !createName.trim() || !createUrl.trim()} class="inline-flex h-9 items-center gap-2 rounded-lg bg-[#e1dcc9] px-3 text-sm font-medium text-[#17130e] disabled:opacity-50">{#if createSaving}<Skeleton class="size-4 rounded-full" />{:else}<Plus size={15}/>{/if} Add server</button>
   {/snippet}
 </Modal>
+<ConfirmDialog open={Boolean(pendingDelete)} title="Remove instance?" description={pendingDelete ? 'Remove "' + pendingDelete.name + '" from this control plane? The remote server will not be changed.' : 'This instance will be removed from this control plane.'} confirmLabel="Remove instance" destructive onconfirm={confirmRemoveInstance} oncancel={() => (pendingDelete = null)} />

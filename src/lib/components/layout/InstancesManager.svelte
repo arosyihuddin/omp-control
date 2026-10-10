@@ -1,17 +1,19 @@
 <script lang="ts">
-  import { Activity, Check, CircleAlert, EllipsisVertical, LoaderCircle, Pencil, Plus, Server, Trash2, X, ArrowLeftRight } from "@lucide/svelte";
-  import { Menu, MenuItem, Modal } from "$lib/components/ui";
+  import { Activity, Check, CircleAlert, EllipsisVertical, Pencil, Plus, Server, Trash2, X, ArrowLeftRight } from "@lucide/svelte";
+  import { ConfirmDialog, Menu, MenuItem, Modal, Skeleton } from "$lib/components/ui";
   import { instancesApi, type Instance, type InstanceStatus } from "$lib/api/instances";
   import { instanceRegistry } from "$lib/stores/instances.svelte";
+  import { toast } from "$lib/stores/toast.svelte";
 
   interface Props { onenter: () => void; }
   let { onenter }: Props = $props();
   let instances = $state<Instance[]>([]);
   let loading = $state(true), saving = $state(false), showForm = $state(false);
   let editing = $state<Instance | null>(null);
-  let error = $state(""), notice = $state("");
+  let error = $state("");
   let name = $state(""), baseUrl = $state("http://127.0.0.1:48766"), credential = $state("");
   let checking = $state<string | null>(null), deleting = $state<string | null>(null);
+  let pendingDelete = $state<Instance | null>(null);
 
   $effect(() => { void load(); });
   async function load() {
@@ -28,7 +30,7 @@
   }
   function openEdit(instance: Instance) {
     editing = instance; name = instance.name; baseUrl = instance.baseUrl; credential = "";
-    error = ""; notice = ""; showForm = true;
+    error = ""; showForm = true;
   }
   function closeForm() {
     if (saving) return;
@@ -36,42 +38,58 @@
   }
   async function saveInstance() {
     if (saving || !name.trim() || !baseUrl.trim()) return;
+    const wasEditing = Boolean(editing);
+    const instanceName = name.trim();
     const hadActiveInstance = Boolean(instanceRegistry.activeId);
-    saving = true; error = ""; notice = "";
+    saving = true; error = "";
     try {
       if (editing) {
         await instancesApi.update(editing.id, {
-          name: name.trim(),
+          name: instanceName,
           baseUrl: baseUrl.trim(),
           ...(credential.trim() ? { credential: credential.trim() } : {}),
         });
-        notice = "Instance updated.";
       } else {
-        await instancesApi.create({ name: name.trim(), baseUrl: baseUrl.trim(), ...(credential.trim() ? { credential: credential.trim() } : {}) });
-        notice = "Instance registered.";
+        await instancesApi.create({ name: instanceName, baseUrl: baseUrl.trim(), ...(credential.trim() ? { credential: credential.trim() } : {}) });
       }
       showForm = false; editing = null;
       name = ""; baseUrl = "http://127.0.0.1:48766"; credential = "";
       await load();
+      toast.success(wasEditing ? "Instance updated" : "Instance registered", instanceName);
       if (!hadActiveInstance && instanceRegistry.active) onenter();
-    } catch (e) { error = e instanceof Error ? e.message : (editing ? "Unable to update instance" : "Unable to register instance"); }
-    finally { saving = false; }
+    } catch (e) {
+      error = e instanceof Error ? e.message : (wasEditing ? "Unable to update instance" : "Unable to register instance");
+      toast.error("Instance save failed", error);
+    } finally { saving = false; }
   }
   async function check(instance: Instance) {
-    checking = instance.id; error = ""; notice = "";
+    checking = instance.id; error = "";
     try {
       const result = await instancesApi.health(instance.id);
-      notice = result.status === "online" ? instance.name + " is online · " + result.latencyMs + " ms" : instance.name + " is offline: " + (result.error ?? "health check failed");
       await load();
-    } catch (e) { error = e instanceof Error ? e.message : "Health check failed"; }
-    finally { checking = null; }
+      if (result.status === "online") toast.success(instance.name + " is online", result.latencyMs + " ms");
+      else toast.info(instance.name + " is offline", result.error ?? "Health check failed");
+    } catch (e) {
+      error = e instanceof Error ? e.message : "Health check failed";
+      toast.error("Health check failed", error);
+    } finally { checking = null; }
   }
-  async function remove(instance: Instance) {
-    if (!window.confirm('Remove "' + instance.name + '" from this control plane? The remote server will not be changed.')) return;
-    deleting = instance.id; error = ""; notice = "";
-    try { await instancesApi.remove(instance.id); notice = "Instance removed."; await load(); }
-    catch (e) { error = e instanceof Error ? e.message : "Unable to remove instance"; }
-    finally { deleting = null; }
+  function remove(instance: Instance) {
+    pendingDelete = instance;
+  }
+  async function confirmRemove() {
+    const instance = pendingDelete;
+    if (!instance) return;
+    pendingDelete = null;
+    deleting = instance.id; error = "";
+    try {
+      await instancesApi.remove(instance.id);
+      await load();
+      toast.success("Instance removed", instance.name + " was removed from this control plane.");
+    } catch (e) {
+      error = e instanceof Error ? e.message : "Unable to remove instance";
+      toast.error("Could not remove instance", error);
+    } finally { deleting = null; }
   }
   function statusClass(status: InstanceStatus) {
     if (status === "online") return "bg-emerald-500";
@@ -92,7 +110,6 @@
   </div>
 
   {#if error && !showForm}<div role="alert" class="flex items-start gap-2 rounded-md border border-red-500/30 bg-red-500/5 p-2.5 text-xs text-red-500"><CircleAlert size={14} class="mt-0.5 shrink-0"/><span class="min-w-0 flex-1">{error}</span><button aria-label="Dismiss error" onclick={() => (error = "")}><X size={13}/></button></div>{/if}
-  {#if notice}<div role="status" class="flex items-start gap-2 rounded-md border border-line bg-surface p-2.5 text-xs"><Check size={14} class="mt-0.5 shrink-0 text-emerald-500"/><span class="min-w-0 flex-1">{notice}</span><button aria-label="Dismiss message" onclick={() => (notice = "")}><X size={13}/></button></div>{/if}
 
   <div class="divide-y divide-line rounded-lg border border-line">
     {#if loading && instances.length === 0}
@@ -142,6 +159,7 @@
   </form>
   {#snippet footer()}
     <button type="button" class="h-9 rounded-lg px-3 text-sm hover:bg-surface-hover disabled:opacity-50" onclick={closeForm} disabled={saving}>Cancel</button>
-    <button type="submit" form="settings-instance-form" disabled={saving || !name.trim() || !baseUrl.trim()} class="inline-flex h-9 items-center gap-2 rounded-lg bg-accent px-3 text-sm font-medium text-white disabled:opacity-50">{#if saving}<LoaderCircle size={15} class="animate-spin"/>{:else if editing}<Check size={15}/>{:else}<Plus size={15}/>{/if} {editing ? "Save changes" : "Register instance"}</button>
+    <button type="submit" form="settings-instance-form" disabled={saving || !name.trim() || !baseUrl.trim()} class="inline-flex h-9 items-center gap-2 rounded-lg bg-accent px-3 text-sm font-medium text-white disabled:opacity-50">{#if saving}<Skeleton class="size-4 rounded-full" />{:else if editing}<Check size={15}/>{:else}<Plus size={15}/>{/if} {editing ? "Save changes" : "Register instance"}</button>
   {/snippet}
 </Modal>
+<ConfirmDialog open={Boolean(pendingDelete)} title="Remove instance?" description={pendingDelete ? 'Remove "' + pendingDelete.name + '" from this control plane? The remote server will not be changed.' : 'This instance will be removed from this control plane.'} confirmLabel="Remove instance" destructive onconfirm={confirmRemove} oncancel={() => (pendingDelete = null)} />

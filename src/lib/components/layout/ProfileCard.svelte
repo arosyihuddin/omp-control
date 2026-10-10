@@ -49,6 +49,24 @@
     </button>
   {/snippet}
   {#snippet children({ close })}
+    <div class="mb-1 border-b border-line px-3 pb-3 pt-2" role="presentation">
+      <div class="flex min-w-0 items-center gap-2.5">
+        <Avatar {name} color={profile.data?.avatarColor} />
+        <div class="min-w-0 flex-1">
+          <div class="truncate text-sm font-medium text-fg">{name}</div>
+          <div class="truncate text-xs text-fg-subtle">{profile.data?.role ?? 'User'}</div>
+        </div>
+      </div>
+      <div class="mt-3 rounded-md bg-surface px-2.5 py-2">
+        <div class="mb-1 text-[10px] font-medium uppercase tracking-wide text-fg-faint">Active instance</div>
+        <div class="truncate text-xs font-medium text-fg" title={instanceRegistry.active?.name ?? 'No instance selected'}>{instanceName}</div>
+        <div class="mt-1 flex items-center gap-1.5 text-xs text-fg-subtle">
+          <span class={['size-1.5 rounded-full', dashboard.connected ? 'bg-success' : 'bg-fg-faint']}></span>
+          {status}
+          {#if instanceRegistry.active?.baseUrl}<span class="truncate text-fg-faint">· {instanceRegistry.active.baseUrl}</span>{/if}
+        </div>
+      </div>
+    </div>
     <MenuItem onclick={() => { close(); window.dispatchEvent(new CustomEvent('omp-control:show-instance-picker')); }}><ArrowLeftRight size={13} /> Switch instance</MenuItem>
     <MenuItem onclick={() => { close(); settingsOpen = true; }}><Settings size={13} /> Settings</MenuItem>
     <MenuItem onclick={() => { close(); window.dispatchEvent(new CustomEvent('omp-control:logout')); }}><LogOut size={13} /> Logout</MenuItem>

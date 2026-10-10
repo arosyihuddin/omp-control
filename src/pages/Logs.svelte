@@ -50,7 +50,7 @@
     <div class="flex items-center gap-2">
       <SegmentedControl label="Filter by status" options={statusOptions} bind:value={status} />
       <IconButton label="Refresh logs" variant="outline" disabled={loading} onclick={load}>
-        <RefreshCw size={14} class={loading ? 'animate-spin' : ''} />
+        {#if loading}<Skeleton class="size-3.5" />{:else}<RefreshCw size={14} />{/if}
       </IconButton>
     </div>
   </div>

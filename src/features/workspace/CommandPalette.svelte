@@ -1,7 +1,7 @@
 <script lang="ts">
   import { cubicOut } from 'svelte/easing';
-  import { Search, FilePlus2, FolderOpen, Save, Files, Maximize2, RefreshCw, File, LoaderCircle, Keyboard, ArrowLeft, Terminal as TerminalIcon } from '@lucide/svelte';
-  import { Modal, Input } from '$lib/components/ui';
+  import { Search, FilePlus2, FolderOpen, Save, Files, Maximize2, RefreshCw, File, Keyboard, ArrowLeft, Terminal as TerminalIcon } from '@lucide/svelte';
+  import { Modal, Input, Skeleton } from '$lib/components/ui';
   import { workspaceApi } from '$lib/api';
   import { joinPath } from './file-utils';
 
@@ -200,7 +200,7 @@
                 </button>
               {/each}
             {:else if loadingFiles && query.trim()}
-              <div class="flex items-center justify-center gap-2 px-3 py-8 text-sm text-fg-subtle"><LoaderCircle size={15} class="animate-spin" /> Searching workspace…</div>
+              <div class="space-y-3 px-3 py-6" aria-label="Searching workspace" aria-busy="true"><div class="flex items-center gap-3"><Skeleton class="size-8 shrink-0" /><div class="flex-1 space-y-2"><Skeleton class="h-3 w-2/3" /><Skeleton class="h-2.5 w-1/3" /></div></div><div class="flex items-center gap-3"><Skeleton class="size-8 shrink-0" /><div class="flex-1 space-y-2"><Skeleton class="h-3 w-1/2" /><Skeleton class="h-2.5 w-1/4" /></div></div><div class="flex items-center gap-3"><Skeleton class="size-8 shrink-0" /><div class="flex-1 space-y-2"><Skeleton class="h-3 w-3/4" /><Skeleton class="h-2.5 w-2/5" /></div></div></div>
             {:else if query.trim()}
               <div class="px-3 py-8 text-center text-sm text-fg-subtle">No matching files or commands</div>
             {:else}
