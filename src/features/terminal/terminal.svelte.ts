@@ -35,7 +35,7 @@ export class TerminalController {
   loading = $state(true);
   creating = $state(false);
   error = $state('');
-
+  fullscreen = $state(false);
   active = $derived(this.terminals.find((item) => item.id === this.activeId));
 
   private socket: WebSocket | null = null;
@@ -240,3 +240,6 @@ export class TerminalController {
     };
   }
 }
+
+/** Shared controller so the app top bar can switch terminal sessions. */
+export const terminalController = new TerminalController();
