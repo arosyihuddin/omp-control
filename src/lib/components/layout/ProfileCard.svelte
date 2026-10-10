@@ -8,9 +8,11 @@
 
   interface Props {
     collapsed?: boolean;
+    placement?: 'top' | 'bottom';
+    compact?: boolean;
   }
 
-  let { collapsed = false }: Props = $props();
+  let { collapsed = false, placement = 'top', compact = false }: Props = $props();
 
   let settingsOpen = $state(false);
   let settingsSection = $state<'profile' | 'general' | 'editor' | 'instances'>('profile');
@@ -20,7 +22,7 @@
   const status = $derived(dashboard.connected ? 'Connected' : 'Disconnected');
 </script>
 
-<Menu align="left" placement="top" width="w-56">
+<Menu align="right" {placement} width="w-56">
   {#snippet trigger({ toggle, open })}
     <button
       type="button"
@@ -28,19 +30,22 @@
       aria-label="Profile menu: {name}, {instanceName}, {status}"
       aria-expanded={open}
       class={[
-        'flex w-full items-center gap-2.5 rounded-md border px-2.5 py-2 text-left transition-colors hover:bg-surface-hover',
-        open ? 'border-line-strong bg-surface-hover' : 'border-line',
-        collapsed && 'md:justify-center md:border-transparent md:px-0',
+        'flex items-center gap-2.5 rounded-md text-left transition-colors hover:bg-surface-hover hover:text-fg',
+        compact ? 'h-8 w-8 justify-center p-0' : 'w-full px-2.5 py-2',
+        !compact && open && 'bg-surface-hover',
+        collapsed && 'md:justify-center md:px-0',
       ]}
       onclick={toggle}
     >
       <span class="relative shrink-0">
         <Avatar {name} color={profile.data?.avatarColor} />
       </span>
-      <span class={['min-w-0', collapsed && 'md:hidden']}>
-        <span class="block truncate text-sm font-medium text-fg-muted">{name}</span>
-        <span class="block truncate text-xs text-fg-faint">{instanceName} · {status}</span>
-      </span>
+      {#if !compact}
+        <span class={['min-w-0', collapsed && 'md:hidden']}>
+          <span class="block truncate text-sm font-medium text-fg-muted">{name}</span>
+          <span class="block truncate text-xs text-fg-faint">{instanceName} · {status}</span>
+        </span>
+      {/if}
     </button>
   {/snippet}
   {#snippet children({ close })}

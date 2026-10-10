@@ -101,7 +101,7 @@
 {:else if !authenticated}
   <AuthPage onAuthenticated={handleAuthenticated} />
 {:else if showInstancePicker || !instanceRegistry.active}
-  <InstancePicker onenter={() => { showInstancePicker = false; void dashboard.refresh(); void prefs.reload(); void profile.load(); }} />
+  <InstancePicker onback={() => { showInstancePicker = false; }} onenter={() => { showInstancePicker = false; void dashboard.refresh(); void prefs.reload(); void profile.load(); }} />
 {:else}
 {#snippet sidebar()}
   <Sidebar />

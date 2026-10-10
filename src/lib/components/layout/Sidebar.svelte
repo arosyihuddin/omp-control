@@ -4,7 +4,6 @@
   import { dashboard } from '$lib/stores/dashboard.svelte';
   import { router } from '$lib/stores/router.svelte';
   import { ui } from '$lib/stores/ui.svelte';
-  import ProfileCard from './ProfileCard.svelte';
   import SidebarItem from './SidebarItem.svelte';
 
   let workspaceOpen = $state(false);
@@ -35,32 +34,14 @@
 >
   <div class="flex h-12 shrink-0 items-center justify-between px-3">
     {#if collapsed}
-      <button
-        type="button"
-        class="group relative mx-auto hidden h-7 w-7 items-center justify-center overflow-hidden rounded-md md:flex"
-        onclick={() => ui.toggleSidebar()}
-        aria-label="Expand sidebar"
-        title="Expand sidebar"
-      >
-        <img src="/favicon.svg" alt="" class="h-full w-full transition-opacity group-hover:opacity-0" />
-        <span class="absolute inset-0 flex items-center justify-center text-fg-subtle opacity-0 transition-opacity group-hover:opacity-100">
-          <PanelLeft size={16} strokeWidth={1.8} />
-        </span>
-      </button>
+      <div class="mx-auto hidden h-7 w-7 items-center justify-center overflow-hidden md:flex" aria-hidden="true">
+        <img src="/favicon.svg" alt="" class="h-full w-full" />
+      </div>
     {/if}
     <div class={['flex min-w-0 items-center gap-2.5', collapsed && 'md:hidden']}>
       <img src="/favicon.svg" alt="" class="h-6 w-6 shrink-0 rounded" />
       <span class="truncate text-base font-semibold tracking-tight">OMP MCP</span>
     </div>
-    <button
-      type="button"
-      class={['hidden h-7 w-7 items-center justify-center rounded-md text-fg-faint transition-colors hover:bg-surface-hover hover:text-fg', !collapsed && 'md:flex']}
-      onclick={() => ui.toggleSidebar()}
-      aria-label="Collapse sidebar"
-      title="Collapse sidebar"
-    >
-      <PanelLeft size={16} strokeWidth={1.8} />
-    </button>
   </div>
 
   <nav class="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-2 pt-2" aria-label="Main">
@@ -111,7 +92,10 @@
     </div>
   </nav>
 
-  <div class="shrink-0 p-2">
-    <ProfileCard {collapsed} />
+  <div class="shrink-0 border-t border-line p-2">
+    <button type="button" class="flex h-9 w-full items-center justify-center gap-2 rounded-md text-fg-faint transition-colors hover:bg-surface hover:text-fg" onclick={() => ui.toggleSidebar()} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+      <PanelLeft size={16} strokeWidth={1.8} />
+      {#if !collapsed}<span class="text-xs font-medium">Collapse sidebar</span>{/if}
+    </button>
   </div>
 </aside>

@@ -31,7 +31,7 @@ export interface RouteDef {
 
 /** Single source of truth for URLs, titles and navigation icons. */
 export const routes: Record<RouteId, RouteDef> = {
-  overview: { id: 'overview', path: '/', title: 'Overview', icon: LayoutDashboard },
+  overview: { id: 'overview', path: '/overview', title: 'Overview', icon: LayoutDashboard },
   tools: { id: 'tools', path: '/tools', title: 'Tools', icon: Wrench },
   approvals: { id: 'approvals', path: '/approvals', title: 'Approvals', icon: ShieldCheck },
   sessions: { id: 'sessions', path: '/sessions', title: 'OMP Sessions', icon: Activity },
