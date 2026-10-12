@@ -97,6 +97,8 @@ function runtimeRouteAllowed(path: string, method: string): boolean {
   const exact: Record<string, string[]> = {
     "/api/dashboard": ["GET"],
     "/api/events": ["GET"],
+    "/api/omp/config": ["GET", "PUT"],
+    "/api/omp/config/reset": ["POST"],
     "/api/terminals": ["GET", "POST"],
     "/api/tools": ["GET"],
     "/api/logs": ["GET"],
@@ -124,7 +126,8 @@ function runtimeRouteAllowed(path: string, method: string): boolean {
   if (new RegExp("^/api/terminals/[^/]+$").test(path)) return method === "DELETE";
   if (new RegExp("^/api/tools/[^/]+$").test(path)) return method === "PATCH";
   if (new RegExp("^/api/approvals/[^/]+/(approve|approve-session|deny)$").test(path)) return method === "POST";
-  if (new RegExp("^/api/sessions/[^/]+/(interrupt|dispose)$").test(path)) return method === "POST";
+  if (path === "/api/sessions") return method === "POST";
+  if (new RegExp("^/api/sessions/[^/]+/(interrupt|dispose|resume)$").test(path)) return method === "POST";
   return false;
 }
 

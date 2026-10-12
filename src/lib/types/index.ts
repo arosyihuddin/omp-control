@@ -8,6 +8,19 @@ export interface Tool {
   exposed: boolean;
 }
 
+export interface SessionMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'tool';
+  content: string;
+  createdAt: string;
+  toolName?: string;
+  toolCallId?: string;
+  arguments?: string;
+  result?: string;
+  status?: "running" | "completed" | "failed";
+  isError?: boolean;
+}
+
 export interface Session {
   sessionId: string;
   status: string;
@@ -19,6 +32,8 @@ export interface Session {
   collab?: { webUrl?: string; viewUrl?: string; instanceId?: string };
   result?: string;
   error?: string;
+  output?: string[];
+  messages?: SessionMessage[];
 }
 
 export type ApprovalStatus = 'pending' | 'approved' | 'denied' | 'expired' | 'cancelled';

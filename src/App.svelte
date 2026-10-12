@@ -21,6 +21,7 @@
   import TerminalPage from './pages/Terminal.svelte';
   import Tools from './pages/Tools.svelte';
   import Sessions from './pages/Sessions.svelte';
+  import OmpConfiguration from './pages/OmpConfiguration.svelte';
   import Approvals from './pages/Approvals.svelte';
   import ToastViewport from '$lib/components/ui/ToastViewport.svelte';
 
@@ -88,10 +89,10 @@
     };
   });
 
-  // Dashboard telemetry is only needed on Overview; avoid a background SSE stream on other pages.
+  // Overview and Sessions consume live dashboard events; other pages avoid a background SSE stream.
   $effect(() => {
     const activeInstance = instanceRegistry.active;
-    if (!authenticated || !activeInstance || router.current !== 'overview') return;
+    if (!authenticated || !activeInstance || (router.current !== 'overview' && router.current !== 'sessions')) return;
     const stop = dashboard.connect();
     stopDashboardEvents = stop;
     void dashboard.refresh();
@@ -99,12 +100,6 @@
       stop();
       if (stopDashboardEvents === stop) stopDashboardEvents = undefined;
     };
-  });
-
-  // Sessions need their own initial snapshot; dashboard telemetry stays limited to Overview.
-  $effect(() => {
-    if (!authenticated || !instanceRegistry.active || router.current !== 'sessions') return;
-    void dashboard.refresh();
   });
 
   // Workspace preferences are loaded only when entering a workspace route.
@@ -143,7 +138,7 @@
 {/snippet}
 
 <AppShell
-    fill={router.current === 'terminal' || router.current === 'workspace-files' || router.current === 'workspace-editor'}
+    fill={router.current === 'terminal' || router.current === 'sessions' || router.current === 'omp-config' || router.current === 'workspace-files' || router.current === 'workspace-editor'}
     {sidebar}
     {header}
   >
@@ -153,6 +148,8 @@
     <Tools />
   {:else if router.current === 'approvals'}
     <Approvals />
+  {:else if router.current === 'omp-config'}
+    <OmpConfiguration />
   {:else if router.current === 'sessions'}
     <Sessions />
   {:else if router.current === 'terminal'}

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { File, Folder, Image as ImageIcon } from '@lucide/svelte';
   import type { WorkspaceItem } from '$lib/types';
-  import { isHidden, isPreviewable } from './file-utils';
+  import { isHidden, isPreviewable } from '$lib/utils/workspace';
 
   interface Props {
     item: Pick<WorkspaceItem, 'name' | 'type'>;

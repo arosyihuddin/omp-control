@@ -6,6 +6,7 @@ import {
   Network,
   ScrollText,
   ShieldCheck,
+  SlidersHorizontal,
   Star,
   Terminal as TerminalIcon,
   Wrench,
@@ -17,6 +18,7 @@ export type RouteId =
   | 'tools'
   | 'approvals'
   | 'sessions'
+  | 'omp-config'
   | 'terminal'
   | 'logs'
   | 'tunnels'
@@ -36,6 +38,7 @@ export const routes: Record<RouteId, RouteDef> = {
   overview: { id: 'overview', path: '/overview', title: 'Overview', icon: LayoutDashboard },
   tools: { id: 'tools', path: '/tools', title: 'Tools', icon: Wrench },
   approvals: { id: 'approvals', path: '/approvals', title: 'Approvals', icon: ShieldCheck },
+  'omp-config': { id: 'omp-config', path: '/omp/configuration', title: 'Configuration', icon: SlidersHorizontal },
   sessions: { id: 'sessions', path: '/sessions', title: 'OMP Sessions', icon: Activity },
   terminal: { id: 'terminal', path: '/terminal', title: 'Terminal', icon: TerminalIcon },
   logs: { id: 'logs', path: '/logs', title: 'Logs', icon: ScrollText },
@@ -45,8 +48,9 @@ export const routes: Record<RouteId, RouteDef> = {
   'workspace-editor': { id: 'workspace-editor', path: '/workspace/editor', title: 'Editor', icon: Code2 },
 };
 
-export const mainNav: RouteId[] = ['overview', 'tools', 'approvals', 'sessions', 'terminal', 'logs', 'tunnels'];
+export const mainNav: RouteId[] = ['overview', 'tools', 'approvals', 'terminal', 'logs', 'tunnels'];
 export const workspaceNav: RouteId[] = ['workspace-favorites', 'workspace-files', 'workspace-editor'];
+export const ompNav: RouteId[] = ['omp-config', 'sessions'];
 
 const byPath = new Map<string, RouteId>(Object.values(routes).map((route) => [route.path, route.id]));
 byPath.set('/workspace', 'workspace-files');

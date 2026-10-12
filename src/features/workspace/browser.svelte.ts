@@ -1,6 +1,6 @@
 import { errorMessage, workspaceApi } from '$lib/api';
 import type { WorkspaceItem } from '$lib/types';
-import { joinPath } from './file-utils';
+import { joinPath } from '$lib/utils/workspace';
 import { prefs } from './preferences.svelte';
 
 /** Directory listing + back/forward history for the Files view. Survives route changes. */

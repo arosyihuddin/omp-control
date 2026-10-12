@@ -3,8 +3,8 @@
   import { Button, Card, EmptyState, IconButton } from '$lib/components/ui';
   import { router } from '$lib/stores/router.svelte';
   import { openPath } from './actions';
-  import FileIcon from './FileIcon.svelte';
-  import { displayPath } from './file-utils';
+  import FileIcon from '$lib/components/workspace/FileIcon.svelte';
+  import { displayPath } from '$lib/utils/workspace';
   import { prefs } from './preferences.svelte';
 </script>
 

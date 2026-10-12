@@ -3,7 +3,7 @@
   import { Search, FilePlus2, FolderOpen, Save, Files, Maximize2, RefreshCw, File, Keyboard, ArrowLeft, Terminal as TerminalIcon } from '@lucide/svelte';
   import { Modal, Input, Skeleton } from '$lib/components/ui';
   import { workspaceApi } from '$lib/api';
-  import { joinPath } from './file-utils';
+  import { joinPath } from '$lib/utils/workspace';
 
   interface Props {
     open: boolean;

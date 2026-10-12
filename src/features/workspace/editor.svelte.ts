@@ -1,6 +1,6 @@
 import { errorMessage, workspaceApi, workspaceStateApi } from '$lib/api';
 import type { WorkspaceItem } from '$lib/types';
-import { basename, dirname } from './file-utils';
+import { basename, dirname } from '$lib/utils/workspace';
 import { prefs } from './preferences.svelte';
 import { readJson, readString, storageKeys, writeJson, writeString } from '$lib/utils/storage';
 

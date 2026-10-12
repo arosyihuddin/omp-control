@@ -2,7 +2,7 @@
   import { Home, PinOff } from '@lucide/svelte';
   import { IconButton } from '$lib/components/ui';
   import { browser } from './browser.svelte';
-  import FileIcon from './FileIcon.svelte';
+  import FileIcon from '$lib/components/workspace/FileIcon.svelte';
   import { prefs } from './preferences.svelte';
 </script>
 

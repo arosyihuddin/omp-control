@@ -2,9 +2,9 @@
   import { EmptyState } from '$lib/components/ui';
   import type { WorkspaceItem } from '$lib/types';
   import { rowShortcut, type FileActions, type RowInteractions } from './actions';
-  import FileIcon from './FileIcon.svelte';
+  import FileIcon from '$lib/components/workspace/FileIcon.svelte';
   import FileItemMenu from './FileItemMenu.svelte';
-  import { isHidden, joinPath } from './file-utils';
+  import { isHidden, joinPath } from '$lib/utils/workspace';
   import InlineNameInput from './InlineNameInput.svelte';
 
   interface Props {

@@ -15,7 +15,7 @@
   let expanded = $state(false);
 </script>
 
- <aside onmouseenter={() => (expanded = true)} onmouseleave={() => (expanded = false)} class={['flex shrink-0 flex-col overflow-hidden border-l border-line bg-canvas/50 transition-[width] duration-200', expanded ? 'w-52' : 'w-11']}>
+ <aside onmouseenter={() => (expanded = true)} onmouseleave={() => (expanded = false)} class={['flex shrink-0 flex-col overflow-hidden border-l border-line bg-surface-raised transition-[width] duration-200', expanded ? 'w-52' : 'w-11']}>
    <div class="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-1.5 pb-2">
      {#if loading}
        {#each Array(3) as _, index (index)}<Skeleton class="h-8 w-full rounded-md" />{/each}

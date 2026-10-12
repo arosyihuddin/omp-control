@@ -4,8 +4,8 @@
   import { errorMessage, workspaceApi } from '$lib/api';
   import type { WorkspaceItem } from '$lib/types';
   import { formatDateShort, formatSize } from '$lib/utils/format';
-  import { dirname, displayPath, isHidden, joinPath } from './file-utils';
-  import FileIcon from './FileIcon.svelte';
+  import { dirname, displayPath, isHidden, joinPath } from '$lib/utils/workspace';
+  import FileIcon from '$lib/components/workspace/FileIcon.svelte';
 
   interface Props {
     open: boolean;

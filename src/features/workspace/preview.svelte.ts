@@ -1,4 +1,4 @@
-import { previewKindFor, type PreviewKind } from './file-utils';
+import { previewKindFor, type PreviewKind } from '$lib/utils/workspace';
 
 /** Which media file (if any) is open in the preview dialog. */
 class PreviewStore {

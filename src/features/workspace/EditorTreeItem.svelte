@@ -2,8 +2,8 @@
   import { ChevronRight } from '@lucide/svelte';
   import type { WorkspaceItem } from '$lib/types';
   import { errorMessage, workspaceApi } from '$lib/api';
-  import { joinPath } from './file-utils';
-  import FileIcon from './FileIcon.svelte';
+  import { joinPath } from '$lib/utils/workspace';
+  import FileIcon from '$lib/components/workspace/FileIcon.svelte';
   import EditorTreeItem from './EditorTreeItem.svelte';
 
   let { item, path, depth = 0, activePath = '', onOpen }: {

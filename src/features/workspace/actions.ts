@@ -2,7 +2,7 @@ import { router } from '$lib/stores/router.svelte';
 import type { WorkspaceItem } from '$lib/types';
 import { browser } from './browser.svelte';
 import { editor } from './editor.svelte';
-import { isPreviewable } from './file-utils';
+import { isPreviewable } from '$lib/utils/workspace';
 import { preview } from './preview.svelte';
 
 /**

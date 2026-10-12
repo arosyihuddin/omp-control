@@ -1,12 +1,13 @@
 <script lang="ts">
   import { Code2, FilePlus2, FolderOpen, ChevronRight, RefreshCw, Save, X, Circle, File, PanelLeft, Check, AlertCircle, Home, Maximize2, Minimize2, Search, Command, FolderX, Terminal as TerminalIcon, Plus } from '@lucide/svelte';
-  import { Button, IconButton, Modal, EmptyState } from '$lib/components/ui';
-  import { basename, displayPath, joinPath, isHidden } from './file-utils';
+  import { Button, IconButton, Modal, EmptyState, ContextMenu, MenuItem } from '$lib/components/ui';
+  import { basename, displayPath, joinPath, isHidden } from '$lib/utils/workspace';
   import EditorTreeItem from './EditorTreeItem.svelte';
-  import PathPicker from './PathPicker.svelte';
+  import PathPicker from '$lib/components/workspace/PathPicker.svelte';
   import CommandPalette from './CommandPalette.svelte';
   import CodeEditor from './CodeEditor.svelte';
   import { editor } from './editor.svelte';
+  import { prefs } from './preferences.svelte';
   import { onMount } from 'svelte';
   import { TerminalController, TerminalSessions, TerminalViewport } from '$features/terminal';
 
@@ -14,6 +15,9 @@
   let commandOpen = $state(false);
   let pickerMode = $state<'file' | 'directory'>('file');
   let closeTarget = $state<string | null>(null);
+  let tabMenu = $state<{ x: number; y: number; path: string } | null>(null);
+  let bulkCloseMode = $state<'others' | 'all' | null>(null);
+  let bulkCloseKeepPath = $state<string | null>(null);
   let closeProjectOpen = $state(false);
   let showTree = $state(true);
   let fullscreen = $state(false);
@@ -184,6 +188,47 @@
     editor.closeTab(path);
   }
 
+  function openTabMenu(event: MouseEvent, path: string) {
+    event.preventDefault();
+    tabMenu = { x: event.clientX, y: event.clientY, path };
+  }
+
+  async function requestBulkClose(mode: 'others' | 'all', keepPath: string | null = null) {
+    const targets = editor.tabs.filter((tab) => mode === 'all' || tab.path !== keepPath);
+    if (targets.some((tab) => tab.content !== tab.saved)) {
+      bulkCloseMode = mode;
+      bulkCloseKeepPath = keepPath;
+      tabMenu = null;
+      return;
+    }
+    if (mode === 'all') editor.closeAll();
+    else if (keepPath) editor.closeOthers(keepPath);
+    tabMenu = null;
+  }
+
+  async function confirmBulkClose(choice: 'save' | 'discard' | 'cancel') {
+    const mode = bulkCloseMode;
+    const keepPath = bulkCloseKeepPath;
+    bulkCloseMode = null;
+    bulkCloseKeepPath = null;
+    if (!mode || choice === 'cancel') return;
+    if (choice === 'save') {
+      await editor.saveAll();
+      if (editor.tabs.some((tab) => tab.content !== tab.saved && (mode === 'all' || tab.path !== keepPath))) return;
+    }
+    if (mode === 'all') editor.closeAll();
+    else if (keepPath) editor.closeOthers(keepPath);
+  }
+
+  async function copyTabPath(path: string) {
+    try {
+      await navigator.clipboard.writeText(path);
+    } catch {
+      editor.error = 'Unable to copy path to clipboard';
+    }
+    tabMenu = null;
+  }
+
   async function confirmClose(discard: boolean) {
     const path = closeTarget;
     closeTarget = null;
@@ -302,7 +347,7 @@
     {/if}
 
     <section class="relative flex min-w-0 flex-1 flex-col">
-      <section class={['absolute inset-x-0 bottom-0 z-20 flex-col overflow-hidden border-t border-line bg-surface shadow-card', terminalOpen ? 'flex' : 'hidden']} style={terminalOpen ? `height: ${terminalHeight}px` : undefined}>
+      <section class={['absolute inset-x-0 bottom-0 z-20 flex-col overflow-hidden border-t border-line bg-surface-raised shadow-card', terminalOpen ? 'flex' : 'hidden']} style={terminalOpen ? `height: ${terminalHeight}px` : undefined}>
         <div role="separator" aria-orientation="horizontal" aria-label="Resize terminal panel" title="Drag to resize terminal" class="group relative z-10 h-1 shrink-0 cursor-row-resize touch-none bg-transparent hover:bg-accent/40 active:bg-accent/60" onpointerdown={startTerminalResize}><span class="absolute inset-x-0 -top-1 -bottom-1"></span></div>
         <header class="flex h-9 shrink-0 items-center justify-between border-b border-line px-2.5"><div class="flex items-center gap-2 text-xs font-medium text-fg-muted"><TerminalIcon size={14} /> Terminal <span class="text-fg-faint">({terminalController.terminals.length})</span></div><div class="flex items-center gap-1"><IconButton label="New terminal" size="sm" disabled={terminalController.creating} onclick={() => void terminalController.create()}><Plus size={14} /></IconButton><IconButton label="Hide terminal" size="sm" onclick={() => (terminalOpen = false)}><X size={14} /></IconButton></div></header>
         <div class="flex min-h-0 flex-1"><div class="relative min-w-0 flex-1"><TerminalViewport bind:this={terminalViewport} ondata={terminalController.sendInput} onresize={terminalController.sendResize} />{#if !terminalController.active && !terminalController.loading}<div class="absolute inset-0 flex items-center justify-center bg-surface text-sm text-fg-subtle">No active terminal</div>{/if}{#if terminalController.error}<button type="button" class="absolute inset-x-3 bottom-3 rounded-md border border-line bg-surface-raised px-3 py-2 text-left text-xs text-danger shadow-card" onclick={() => (terminalController.error = '')}>{terminalController.error}</button>{/if}</div><TerminalSessions terminals={terminalController.terminals} activeId={terminalController.activeId} loading={terminalController.loading} onopen={(id) => terminalController.open(id)} onclose={(id) => void closeTerminal(id)} /></div>
@@ -310,8 +355,8 @@
       {#if editor.tabs.length > 0}
         <div class="flex h-10 min-w-0 items-stretch overflow-x-auto border-b border-line bg-surface">
           {#each editor.tabs as tab (tab.path)}
-            <div class={['group flex min-w-0 max-w-52 shrink-0 items-center border-r border-line', editor.activePath === tab.path ? 'border-b-2 border-b-accent bg-surface-raised' : 'border-b-2 border-b-transparent']}>
-              <button class={['flex min-w-0 flex-1 items-center gap-2 px-3 py-1.5 text-sm', editor.activePath === tab.path ? 'text-fg' : 'text-fg-muted hover:text-fg']} title={tab.preview ? tab.path + ' — Preview (will be replaced when opening another file)' : tab.path} onclick={() => (editor.activePath = tab.path)} ondblclick={() => editor.makePermanent(tab.path)}>
+            <div class={['group flex min-w-0 max-w-52 shrink-0 items-center border-r border-line', editor.activePath === tab.path ? 'border-b-2 border-b-accent bg-surface-raised' : 'border-b-2 border-b-transparent']} role="group" oncontextmenu={(event) => openTabMenu(event, tab.path)}>
+              <button class={['flex min-w-0 flex-1 items-center gap-2 px-3 py-1.5 text-sm', editor.activePath === tab.path ? 'text-fg' : 'text-fg-muted hover:text-fg']} title={tab.path} onclick={() => (editor.activePath = tab.path)} onauxclick={(event) => { if (event.button === 1) { event.preventDefault(); closeRequest(tab.path); } }} ondblclick={() => editor.makePermanent(tab.path)}>
                 <File size={14} class="shrink-0 text-fg-subtle" />
                 <span class="truncate" class:italic={tab.preview}>{tab.name}</span>
                 {#if tab.content !== tab.saved}
@@ -323,6 +368,7 @@
           {/each}
           <div class="flex flex-1 items-center justify-end gap-1 px-2">
             <IconButton label="Close saved tabs" size="sm" onclick={() => editor.closeSaved()}><Check size={14} /></IconButton>
+            <IconButton label="Close all tabs" size="sm" onclick={() => void requestBulkClose('all')}><X size={14} /></IconButton>
           </div>
         </div>
         <div class="flex min-h-0 flex-1 flex-col">
@@ -359,6 +405,19 @@
                 <Button variant="secondary" onclick={() => openPicker('file')}><FilePlus2 size={15} /> Open File</Button>
               {/if}
             </div>
+            {#if prefs.recents.length}
+              <div class="mt-6 w-full max-w-lg text-left">
+                <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-fg-faint">Recent folders</p>
+                <div class="space-y-1">
+                  {#each prefs.recents.slice(0, 5) as recent (recent.path)}
+                    <button type="button" class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors hover:bg-surface-hover" onclick={() => void editor.openFolder(recent.path, recent.name)}>
+                      <FolderOpen size={15} class="shrink-0 text-fg-subtle" />
+                      <span class="min-w-0 flex-1"><span class="block truncate text-sm text-fg">{recent.name}</span><span class="block truncate font-mono text-xs text-fg-faint">{displayPath(recent.path)}</span></span>
+                    </button>
+                  {/each}
+                </div>
+              </div>
+            {/if}
           </EmptyState>
         </div>
       {/if}
@@ -385,5 +444,27 @@
     <Button variant="ghost" onclick={() => (closeTarget = null)}>Cancel</Button>
     <Button variant="secondary" onclick={() => void confirmClose(true)}>Don't Save</Button>
     <Button variant="primary" onclick={() => void confirmClose(false)}>Save</Button>
+  {/snippet}
+</Modal>
+
+{#if tabMenu}
+  <ContextMenu x={tabMenu.x} y={tabMenu.y} onclose={() => (tabMenu = null)}>
+    {#snippet children({ close })}
+      <MenuItem onclick={() => { const path = tabMenu?.path; close(); tabMenu = null; if (path) closeRequest(path); }}>Close</MenuItem>
+      <MenuItem onclick={() => { const path = tabMenu?.path; if (path) void requestBulkClose('others', path); }}>Close Others</MenuItem>
+      <MenuItem onclick={() => { editor.closeSaved(); close(); tabMenu = null; }}>Close Saved</MenuItem>
+      <MenuItem onclick={() => { close(); void requestBulkClose('all'); }}>Close All</MenuItem>
+      <div class="my-1 border-t border-line"></div>
+      <MenuItem onclick={() => { const path = tabMenu?.path; close(); if (path) void copyTabPath(path); }}>Copy Path</MenuItem>
+    {/snippet}
+  </ContextMenu>
+{/if}
+
+<Modal open={bulkCloseMode !== null} title={bulkCloseMode === 'all' ? 'Close all tabs?' : 'Close other tabs?'} width="max-w-md" onclose={() => void confirmBulkClose('cancel')}>
+  <p class="px-4 py-4 text-sm text-fg-muted">Some tabs have unsaved changes. Save them before closing?</p>
+  {#snippet footer()}
+    <Button variant="ghost" onclick={() => void confirmBulkClose('cancel')}>Cancel</Button>
+    <Button variant="secondary" onclick={() => void confirmBulkClose('discard')}>Don't Save</Button>
+    <Button variant="primary" onclick={() => void confirmBulkClose('save')}>Save & Close</Button>
   {/snippet}
 </Modal>

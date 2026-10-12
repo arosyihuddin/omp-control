@@ -9,9 +9,9 @@
   import FileList from './FileList.svelte';
   import FilesSidebar from './FilesSidebar.svelte';
   import FilesToolbar from './FilesToolbar.svelte';
-  import { isHidden } from './file-utils';
+  import { isHidden } from '$lib/utils/workspace';
   import ItemMenuItems from './ItemMenuItems.svelte';
-  import PathPicker from './PathPicker.svelte';
+  import PathPicker from '$lib/components/workspace/PathPicker.svelte';
   import { prefs, type SortBy } from './preferences.svelte';
   import PropertiesDialog from './PropertiesDialog.svelte';
 

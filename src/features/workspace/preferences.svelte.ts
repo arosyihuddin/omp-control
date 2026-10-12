@@ -1,7 +1,7 @@
 import { errorMessage, workspaceStateApi } from '$lib/api';
 import type { FavoriteEntry, PinEntry, RecentEntry, WorkspaceItem } from '$lib/types';
 import { readJson, readString, storageKeys } from '$lib/utils/storage';
-import { basename } from './file-utils';
+import { basename } from '$lib/utils/workspace';
 
 export type FileView = 'list' | 'grid';
 export type SortBy = 'name' | 'size' | 'modified';
