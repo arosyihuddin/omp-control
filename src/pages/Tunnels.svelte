@@ -17,6 +17,7 @@
 
   const activeTunnels = $derived(tunnels.filter((tunnel) => ['starting', 'active', 'stopping'].includes(tunnel.status)));
   const busy = $derived(starting);
+  const tunnelUnavailable = $derived(!checkingCloudflared && cloudflared?.available === false);
   async function startTunnel(event: SubmitEvent) {
     event.preventDefault();
     if (busy) return;
@@ -64,22 +65,30 @@
   }
 
   onMount(() => {
-    void tunnelsApi.status().then((status) => { cloudflared = status; }).catch(() => { cloudflared = null; }).finally(() => { checkingCloudflared = false; });
-    const events = new EventSource(runtimeUrl('/control/v1/tunnels/events'));
-    events.addEventListener('tunnels', (event) => {
-      try {
-        const data = JSON.parse((event as MessageEvent<string>).data) as { tunnels: TunnelInfo[] };
-        tunnels = data.tunnels ?? [];
+    let events: EventSource | undefined;
+    void tunnelsApi.status().then((status) => {
+      cloudflared = status;
+      if (status.available === false) {
+        tunnels = [];
         loading = false;
-        error = '';
-      } catch {
-        error = 'Received an invalid tunnel update from the server.';
+        return;
       }
-    });
-    events.onerror = () => {
-      // EventSource reconnects automatically; keep the last known tunnel state visible.
-    };
-    return () => events.close();
+      events = new EventSource(runtimeUrl('/control/v1/tunnels/events'));
+      events.addEventListener('tunnels', (event) => {
+        try {
+          const data = JSON.parse((event as MessageEvent<string>).data) as { tunnels: TunnelInfo[] };
+          tunnels = data.tunnels ?? [];
+          loading = false;
+          error = '';
+        } catch {
+          error = 'Received an invalid tunnel update from the server.';
+        }
+      });
+      events.onerror = () => {
+        // EventSource reconnects automatically; keep the last known tunnel state visible.
+      };
+    }).catch(() => { cloudflared = null; }).finally(() => { checkingCloudflared = false; });
+    return () => events?.close();
   });
 </script>
 
@@ -89,11 +98,11 @@
       <div class="flex min-w-0 items-start gap-3">
         <span class={[(checkingCloudflared ? 'bg-warning' : cloudflared?.installed ? 'bg-success' : 'bg-danger'), 'mt-1 size-2.5 shrink-0 rounded-full']}></span>
         <div class="min-w-0">
-          <p class="text-sm font-medium text-fg">{checkingCloudflared ? 'Checking installation…' : cloudflared === null ? 'Status unavailable' : cloudflared.installed ? 'cloudflared is installed' : 'cloudflared is not installed'}</p>
+          <p class="text-sm font-medium text-fg">{checkingCloudflared ? 'Checking installation…' : cloudflared === null ? 'Status unavailable' : cloudflared.available === false ? 'Tunnel process management unavailable in Workers' : cloudflared.installed ? 'cloudflared is installed' : 'cloudflared is not installed'}</p>
           {#if cloudflared?.version}<p class="mt-1 break-all text-xs text-fg-muted">{cloudflared.version}</p>{/if}
           {#if cloudflared?.path}<p class="mt-1 break-all font-mono text-xs text-fg-faint">{cloudflared.path}</p>{/if}
           {#if !checkingCloudflared && cloudflared === null}<p class="mt-1 text-xs text-fg-muted">Could not check the API host. Check the connection and try again.</p>{/if}
-          {#if !checkingCloudflared && cloudflared && !cloudflared.installed}<p class="mt-1 text-xs text-fg-muted">Install cloudflared on the machine running the OMP Control API to create tunnels.</p>{/if}
+          {#if !checkingCloudflared && cloudflared?.available === false}<p class="mt-1 text-xs text-fg-muted">{cloudflared.reason ?? "Manage tunnels separately from this Worker deployment."}</p>{:else if !checkingCloudflared && cloudflared && !cloudflared.installed}<p class="mt-1 text-xs text-fg-muted">Install cloudflared on the machine running the OMP Control API to create tunnels.</p>{/if}
         </div>
       </div>
       <button type="button" class="inline-flex h-8 shrink-0 items-center justify-center rounded-md border border-line px-3 text-xs font-medium text-fg-muted hover:bg-surface-hover" onclick={() => { checkingCloudflared = true; void tunnelsApi.status().then((status) => { cloudflared = status; }).catch(() => { cloudflared = null; }).finally(() => { checkingCloudflared = false; }); }}>Check again</button>
@@ -106,13 +115,13 @@
       <div class="flex flex-col gap-2 sm:flex-row">
         <div class="relative min-w-0 flex-1">
           <Globe size={15} class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fg-faint" />
-          <input id="tunnel-port" bind:value={port} type="number" min="1" max="65535" step="1" required placeholder="5173" class="h-9 w-full rounded-md border border-line bg-canvas pl-9 pr-3 text-sm text-fg outline-none transition-colors placeholder:text-fg-faint focus:border-accent" disabled={busy} />
+          <input id="tunnel-port" bind:value={port} type="number" min="1" max="65535" step="1" required placeholder="5173" class="h-9 w-full rounded-md border border-line bg-canvas pl-9 pr-3 text-sm text-fg outline-none transition-colors placeholder:text-fg-faint focus:border-accent" disabled={busy || tunnelUnavailable} />
         </div>
-        <button type="submit" class="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md bg-accent px-4 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50" disabled={busy}>
+        <button type="submit" class="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md bg-accent px-4 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50" disabled={busy || tunnelUnavailable}>
           {#if starting}<LoaderCircle size={15} class="animate-spin" /> Starting…{:else}<Plus size={15} /> Start tunnel{/if}
         </button>
       </div>
-      <p class="text-xs text-fg-faint">Enter the port of a service running on this machine, for example 5173, 3000, or 8000.</p>
+      <p class="text-xs text-fg-faint">Enter the port of a service running on this machine, for example 5173, 3000, or 8000. Tunnel creation is available only in self-hosted mode.</p>
       {#if error}<p class="flex items-start gap-2 text-sm text-danger" role="alert"><AlertTriangle size={15} class="mt-0.5 shrink-0" />{error}</p>{/if}
     </form>
   </Panel>

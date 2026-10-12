@@ -1,13 +1,13 @@
 # OMP Control API contract (draft v1)
 
-This contract describes the control-plane API. Registry CRUD and health-check endpoints are implemented in the current foundation; authentication and per-user server-side active-instance preferences remain planned. The current browser stores its active instance locally, and the runtime proxy uses an explicit route/method allowlist.
+This contract describes the control-plane API shared by the Bun self-hosted server and the Cloudflare Workers deployment. Registry CRUD, health checks, first-admin setup, login/logout, and session authentication are implemented. The browser stores its active instance locally, and the runtime proxy uses an explicit route/method allowlist. Cloudflare mode stores registry and authentication data in D1; self-hosted mode uses local SQLite.
 
 Base path: /control/v1
 
 ## Conventions
 
 - JSON request and response bodies; timestamps are ISO 8601 UTC.
-- All endpoints require an authenticated session once authentication is implemented.
+- All endpoints except health and the auth status/setup/login/logout routes require an authenticated session.
 - Never accept an arbitrary upstream URL from a browser request. Instance URLs are registered and validated server-side.
 - Instance credentials are server-side secrets and must never be returned by list/detail APIs.
 - Errors use an object with error.code and error.message.
@@ -76,7 +76,7 @@ Active instance is initially a client preference. Persist it per user once authe
 ### Proxy runtime APIs
 /control/v1/instances/{instanceId}/runtime/{path}
 
-Implemented as an explicit allowlist for supported REST endpoints and SSE forwarding. Terminal WebSocket forwarding is supported for instances without a bearer credential; authenticated WebSocket forwarding remains a limitation. No unrestricted generic proxy is exposed.
+Implemented as an explicit allowlist for supported REST endpoints and SSE forwarding. Terminal WebSocket forwarding is supported in Cloudflare mode only for instances without a bearer credential; authenticated WebSocket forwarding remains a limitation. Cloudflare Workers cannot spawn local cloudflared processes, so tunnel management is available only in self-hosted mode. No unrestricted generic proxy is exposed.
 
 ## Rollout sequence
 

@@ -33,7 +33,7 @@ export interface TunnelInfo {
   logs: string[];
   error: string | null;
 }
-export interface CloudflaredStatus { installed: boolean; path: string | null; version: string | null; }
+export interface CloudflaredStatus { installed: boolean; path: string | null; version: string | null; available?: boolean; reason?: string; }
 
 export const tunnelsApi = {
   list: async () => (await request<{ tunnels: TunnelInfo[] }>('/control/v1/tunnels')).tunnels ?? [],

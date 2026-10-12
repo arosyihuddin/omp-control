@@ -26,6 +26,37 @@ The registry API uses Bun SQLite and stores its database at `./data/omp-control.
 
 Authentication is enabled by default. On first launch, create the administrator account through the setup page; usernames must be 3–64 characters and passwords at least 12 characters. The first account can only be created once. Login sessions use random opaque tokens stored as SHA-256 hashes in SQLite and an HttpOnly, SameSite=Strict cookie. The API sets the cookie's Secure attribute automatically based on the browser request's Origin scheme (HTTPS gets Secure; HTTP local development does not), with the request URL as fallback. All control API and runtime proxy endpoints require an authenticated session; `/healthz` remains public. The API binds to loopback by default; do not expose it publicly without HTTPS and appropriate network controls.
 
+## ☁️ Cloudflare Workers deployment
+
+OMP Control supports two deployment modes:
+
+- **Bun / self-hosted:** keeps the existing `server/index.ts`, local SQLite database, and local `cloudflared` tunnel controls.
+- **Cloudflare Workers:** serves the Vite-built frontend and runs the control API in `cloudflare/worker.ts`; persistent registry and auth data live in Cloudflare D1.
+
+### First-time setup
+
+1. Create a D1 database named `omp-control` in your Cloudflare account.
+2. Replace the placeholder `database_id` in `wrangler.jsonc` with the ID returned by Cloudflare.
+3. Install dependencies and authenticate Wrangler:
+
+   ```bash
+   bun install
+   bunx wrangler login
+   ```
+
+4. Apply the schema and deploy:
+
+   ```bash
+   bun run cf:migrate:remote
+   bun run cf:deploy
+   ```
+
+5. Open the deployed URL and create the first administrator account in the setup screen.
+
+For local Worker emulation, run `bun run cf:migrate:local` once, then `bun run cf:dev`.
+
+**Cloudflare-mode differences:** OMP instances must be reachable from Cloudflare over HTTPS. The browser terminal WebSocket proxy is intended for instances without bearer credentials; authenticated WebSocket proxying remains unsupported. The local `cloudflared` process manager cannot run inside Workers, so tunnel creation and process controls are disabled in this mode and must be managed separately. The self-hosted Bun mode is unchanged.
+
 ## 🏗️ Architecture
 
 - OMP-MCP: per-instance runtime and instance-local APIs.
