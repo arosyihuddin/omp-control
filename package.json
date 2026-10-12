@@ -12,9 +12,11 @@
     "dev:api": "bun run server/index.ts",
     "start:api": "bun run server/index.ts",
     "cf:dev": "wrangler dev",
-    "cf:deploy": "bun run build && wrangler deploy",
+    "cf:deploy": "bun run cf:ensure-db && bun run cf:migrate:remote && bun run build && wrangler deploy",
     "cf:migrate:local": "wrangler d1 migrations apply omp-control --local",
-    "cf:migrate:remote": "wrangler d1 migrations apply omp-control --remote"
+    "cf:migrate:remote": "wrangler d1 migrations apply omp-control --remote",
+    "cf:ensure-db": "node scripts/cf-ensure-db.mjs",
+    "cf:setup": "bun run cf:ensure-db && bun run cf:migrate:remote"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.0",

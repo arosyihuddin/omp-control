@@ -14,7 +14,7 @@
     {
       "binding": "DB",
       "database_name": "omp-control",
-      "database_id": "00000000000000000000000000000000",
+      "database_id": "a23611f0-b41f-465e-a456-6ea48ec6b8f6",
       "migrations_dir": "migrations",
     },
   ],

@@ -35,23 +35,28 @@ OMP Control supports two deployment modes:
 
 ### First-time setup
 
-1. Create a D1 database named `omp-control` in your Cloudflare account.
-2. Replace the placeholder `database_id` in `wrangler.jsonc` with the ID returned by Cloudflare.
-3. Install dependencies and authenticate Wrangler:
+1. Install dependencies and authenticate Wrangler:
 
-   ```bash
+   ~~~bash
    bun install
    bunx wrangler login
-   ```
+   ~~~
 
-4. Apply the schema and deploy:
+2. Run the setup command. It reuses the existing omp-control D1 database, or creates it if it does not exist and the config still has the placeholder ID. It then applies remote migrations:
 
-   ```bash
-   bun run cf:migrate:remote
+   ~~~bash
+   bun run cf:setup
+   ~~~
+
+3. Build and deploy. This command also verifies the D1 binding and applies any pending migrations on subsequent deployments:
+
+   ~~~bash
    bun run cf:deploy
-   ```
+   ~~~
 
-5. Open the deployed URL and create the first administrator account in the setup screen.
+The setup script will not overwrite a configured database ID or silently create a replacement database if the configured database is missing from the authenticated Cloudflare account. Check the Wrangler account/profile if validation fails.
+
+After deployment, open the Worker URL and create the first administrator account in the setup screen.
 
 For local Worker emulation, run `bun run cf:migrate:local` once, then `bun run cf:dev`.
 
