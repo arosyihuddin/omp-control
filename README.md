@@ -1,12 +1,14 @@
-# OMP Control
+# 🎛️ OMP Control
 
-Independent dashboard and future multi-instance control plane for OMP-MCP.
+![Frontend](https://img.shields.io/badge/frontend-Svelte-FF3E00?logo=svelte&logoColor=white) ![Build](https://img.shields.io/badge/build-Vite-646CFF?logo=vite&logoColor=white) ![Runtime](https://img.shields.io/badge/API-Bun-000000?logo=bun&logoColor=white) ![Status](https://img.shields.io/badge/status-active-238636)
 
-## Current status
+> 🖥️ A standalone dashboard and control plane for managing multiple OMP-MCP runtime instances.
 
-This repository starts from the existing Svelte dashboard, copied out of the OMP-MCP repository so the runtime repository remains operational while the UI is separated. The original dashboard remains in omp-mcp/dashboard until the standalone build and API routing are verified.
+## 🧭 Project status
 
-## Development
+The dashboard is maintained independently from the OMP-MCP runtime. It provides the UI, instance registry, authentication, health checks, and an allowlisted proxy that routes dashboard API and WebSocket traffic to the selected runtime instance.
+
+## 🚀 Development
 
 Requirements: Bun.
 
@@ -14,19 +16,25 @@ Requirements: Bun.
     bun install
     bun run dev
 
-The development command starts the control API and Vite UI together. Vite proxies /control to the bundled control API at http://127.0.0.1:48767. Runtime API and WebSocket requests are routed through the selected instance using the control API, so no OMP_MCP_BACKEND environment variable or direct runtime proxy is needed.
+The development command starts the control API and Vite UI together. Vite proxies `/control` to the control API at `http://127.0.0.1:48767`. Runtime API and WebSocket requests are routed through the selected instance; the browser does not need a direct runtime URL or an `OMP_MCP_BACKEND` setting.
 
-The registry API uses Bun SQLite and stores its database at ./data/omp-control.sqlite by default. It implements instance list/register/get/update/remove, health checks, and an allowlisted per-instance runtime proxy for dashboard REST and SSE calls. The dashboard has an active-instance selector; the choice is saved in browser local storage. Credentials are stored server-side and excluded from instance responses.
+### 🗃️ Instance registry
 
-Authentication is enabled by default. On first launch, create the administrator account through the setup page; usernames must be 3–64 characters and passwords at least 12 characters. The first account can only be created once. Login sessions use random opaque tokens stored as SHA-256 hashes in SQLite and an HttpOnly, SameSite=Strict cookie. The API sets the cookie's Secure attribute automatically based on the browser request's Origin scheme (HTTPS gets Secure; HTTP local development does not), with the request URL as fallback. All control API and runtime proxy endpoints require an authenticated session; /healthz remains public. The API binds to loopback by default; do not expose it publicly without HTTPS and appropriate network controls.
+The registry API uses Bun SQLite and stores its database at `./data/omp-control.sqlite` by default. It implements instance list/register/get/update/remove, health checks, and an allowlisted per-instance runtime proxy for dashboard REST and SSE calls. The dashboard has an active-instance selector; the choice is saved in browser local storage. Credentials are stored server-side and excluded from instance responses.
 
-## Architecture
+### 🔐 Authentication and security
+
+Authentication is enabled by default. On first launch, create the administrator account through the setup page; usernames must be 3–64 characters and passwords at least 12 characters. The first account can only be created once. Login sessions use random opaque tokens stored as SHA-256 hashes in SQLite and an HttpOnly, SameSite=Strict cookie. The API sets the cookie's Secure attribute automatically based on the browser request's Origin scheme (HTTPS gets Secure; HTTP local development does not), with the request URL as fallback. All control API and runtime proxy endpoints require an authenticated session; `/healthz` remains public. The API binds to loopback by default; do not expose it publicly without HTTPS and appropriate network controls.
+
+## 🏗️ Architecture
 
 - OMP-MCP: per-instance runtime and instance-local APIs.
-- OMP Control: dashboard, instance registry, health/status aggregation, and eventually a controlled proxy to selected instances.
+- OMP Control: dashboard, instance registry, health/status aggregation, authentication, and controlled proxy to selected instances.
 - Browser clients must never provide arbitrary upstream URLs. Instance endpoints and credentials must be validated and stored server-side to avoid SSRF and credential exposure.
 
-Registry API:
+## 🔌 API overview
+
+Registry endpoints:
 
 - GET /control/v1/instances
 - POST /control/v1/instances with name, baseUrl, and optional write-only credential
@@ -36,4 +44,10 @@ Registry API:
 
 Base URLs must be HTTP(S), must not contain embedded credentials/query/fragment, and must use HTTPS except for loopback development instances. Health checks use a 4-second timeout and do not follow redirects. Terminal WebSocket forwarding works for instances without a bearer credential; authenticated WebSocket proxying remains pending.
 
-See docs/API_CONTRACT.md for the API model and rollout plan.
+## 📚 Documentation
+
+- `docs/API_CONTRACT.md` — API model and rollout plan.
+
+## 🧩 Related project
+
+- **OMP-MCP** — runtime server that provides agent sessions and native MCP tools.
