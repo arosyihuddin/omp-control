@@ -3,7 +3,9 @@ import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { defineConfig } from "vite";
 
 // https://vite.dev/config/
-export default defineConfig(() => ({
+const backendBaseUrl = "http://127.0.0.1:48767";
+
+export default defineConfig({
   plugins: [svelte()],
   resolve: {
     alias: {
@@ -13,7 +15,11 @@ export default defineConfig(() => ({
   },
   server: {
     proxy: {
-      "/control": { target: "http://127.0.0.1:48767", changeOrigin: true, ws: true },
+      "/control": {
+        target: backendBaseUrl,
+        changeOrigin: true,
+        ws: true,
+      },
     },
   },
-}));
+});

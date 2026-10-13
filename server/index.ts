@@ -4,7 +4,8 @@ import { dirname, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { randomUUID } from "node:crypto";
 
-const port = Number(process.env.OMP_CONTROL_PORT ?? 48767);
+const hostname = "127.0.0.1";
+const port = 48767;
 const dbPath = resolve(process.env.OMP_CONTROL_DB_PATH ?? "./data/omp-control.sqlite");
 mkdirSync(dirname(dbPath), { recursive: true });
 process.umask(0o077);
@@ -368,7 +369,7 @@ async function stopTunnel(record: TunnelRecord): Promise<void> {
 }
 
 const server = Bun.serve({
-  hostname: process.env.OMP_CONTROL_HOST ?? "127.0.0.1",
+  hostname,
   port,
   websocket: {
     open(ws) {

@@ -19,6 +19,7 @@ type InstanceRow = {
   updated_at: string;
 };
 const COOKIE = "omp_control_session";
+const PASSWORD_ITERATIONS = 100000;
 const json = (data: unknown, status = 200, headers: HeadersInit = {}) =>
   Response.json(data, {
     status,
@@ -76,16 +77,17 @@ async function passwordHash(password: string) {
     ["deriveBits"],
   );
   const bits = await crypto.subtle.deriveBits(
-    { name: "PBKDF2", hash: "SHA-256", salt, iterations: 310000 },
+    { name: "PBKDF2", hash: "SHA-256", salt, iterations: PASSWORD_ITERATIONS },
     key,
     256,
   );
-  return "pbkdf2$310000$" + hex(salt.buffer) + "$" + hex(bits);
+  return "pbkdf2$" + PASSWORD_ITERATIONS + "$" + hex(salt.buffer) + "$" + hex(bits);
 }
 async function passwordVerify(password: string, stored: string) {
   try {
     const [kind, iterations, saltHex, want] = stored.split("$");
-    if (kind !== "pbkdf2" || !saltHex || !want) return false;
+    const rounds = Number(iterations);
+    if (kind !== "pbkdf2" || !Number.isInteger(rounds) || rounds < 1 || rounds > PASSWORD_ITERATIONS || !saltHex || !want) return false;
     const salt = new Uint8Array(
       saltHex.match(/.{2}/g)!.map((v) => parseInt(v, 16)),
     );
@@ -102,7 +104,7 @@ async function passwordVerify(password: string, stored: string) {
           name: "PBKDF2",
           hash: "SHA-256",
           salt,
-          iterations: Number(iterations),
+          iterations: rounds,
         },
         key,
         256,
