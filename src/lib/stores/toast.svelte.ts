@@ -1,6 +1,6 @@
-export type ToastTone = 'success' | 'error' | 'info';
+type ToastTone = 'success' | 'error' | 'info';
 
-export interface ToastItem {
+interface ToastItem {
   id: number;
   tone: ToastTone;
   title: string;

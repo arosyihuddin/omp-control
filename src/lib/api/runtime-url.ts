@@ -1,6 +1,6 @@
 const ACTIVE_INSTANCE_KEY = "omp-control-active-instance";
 
-export function activeInstanceId(): string | null {
+function activeInstanceId(): string | null {
   try { return localStorage.getItem(ACTIVE_INSTANCE_KEY); } catch { return null; }
 }
 

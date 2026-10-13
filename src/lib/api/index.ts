@@ -12,6 +12,7 @@ import type {
   Session,
   TerminalInfo,
   Tool,
+  ToolCustomRule,
   ToolCallLog,
   WorkspaceItem,
 } from '$lib/types';
@@ -23,7 +24,7 @@ export { errorMessage } from './http';
 const enc = encodeURIComponent;
 
 
-export type TunnelStatus = 'starting' | 'active' | 'stopping' | 'stopped' | 'error';
+type TunnelStatus = 'starting' | 'active' | 'stopping' | 'stopped' | 'error';
 export interface TunnelInfo {
   id: string;
   targetUrl: string;
@@ -34,12 +35,32 @@ export interface TunnelInfo {
   error: string | null;
 }
 export interface CloudflaredStatus { installed: boolean; path: string | null; version: string | null; available?: boolean; reason?: string; }
-
+interface RuntimeTunnel {
+  id: string;
+  target: string;
+  state: 'starting' | 'running' | 'stopping' | 'stopped' | 'error';
+  publicUrl?: string;
+  createdAt: string;
+  logs: string[];
+  error?: string;
+}
+export function normalizeTunnelInfo(tunnel: RuntimeTunnel): TunnelInfo {
+  return {
+    id: tunnel.id,
+    targetUrl: tunnel.target,
+    status: tunnel.state === 'running' ? 'active' : tunnel.state,
+    publicUrl: tunnel.publicUrl ?? null,
+    createdAt: tunnel.createdAt,
+    logs: tunnel.logs ?? [],
+    error: tunnel.error ?? null,
+  };
+}
 export const tunnelsApi = {
-  list: async () => (await request<{ tunnels: TunnelInfo[] }>('/control/v1/tunnels')).tunnels ?? [],
-  status: async () => request<CloudflaredStatus>('/control/v1/tunnels/status'),
-  start: async (targetUrl: string) => (await postJson<{ tunnel: TunnelInfo }>('/control/v1/tunnels', { targetUrl })).tunnel,
-  stop: async (id: string) => (await postJson<{ tunnel: TunnelInfo }>('/control/v1/tunnels/' + enc(id) + '/stop')).tunnel,
+  list: async () => (await request<{ tunnels: RuntimeTunnel[] }>('/api/tunnels')).tunnels.map(normalizeTunnelInfo),
+  status: () => request<CloudflaredStatus>('/api/tunnels/status'),
+  eventsUrl: () => runtimeUrl('/api/tunnels/events'),
+  start: async (targetUrl: string) => normalizeTunnelInfo((await postJson<{ tunnel: RuntimeTunnel }>('/api/tunnels', { target: targetUrl })).tunnel),
+  stop: async (id: string) => normalizeTunnelInfo((await postJson<{ tunnel: RuntimeTunnel }>('/api/tunnels/' + enc(id) + '/stop')).tunnel),
 };
 
 export const dashboardApi = {
@@ -83,13 +104,17 @@ export const ompConfigApi = {
 export const toolsApi = {
   list: async () => (await request<{ tools: Tool[] }>('/api/tools')).tools ?? [],
   setExposed: async (name: string, exposed: boolean) =>
-    (
-      await request<{ tool: Tool }>(`/api/tools/${enc(name)}`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ exposed }),
-      })
-    ).tool,
+    (await request<{ tool: Tool }>(`/api/tools/${enc(name)}`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ exposed }),
+    })).tool,
+  setPermission: async (name: string, permission: Tool['permission'] | null, customRule?: ToolCustomRule) =>
+    (await request<{ tool: Tool }>(`/api/tools/${enc(name)}`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ permission, ...(customRule ? { customRule } : {}) }),
+    })).tool,
+  setSectionPermission: async (section: Tool['section'], permission: Tool['permission'], customRule?: ToolCustomRule) =>
+    request<{ tools: Tool[]; sectionPermissions: Record<Tool['section'], Tool['permission']>; sectionCustomRules: Record<Tool['section'], ToolCustomRule> }>(`/api/tools/sections/${section}/permission`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ permission, ...(customRule ? { customRule } : {}) }),
+    }),
 };
 
 export const approvalsApi = {

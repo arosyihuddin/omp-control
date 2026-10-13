@@ -5,7 +5,7 @@ import { basename } from '$lib/utils/workspace';
 
 export type FileView = 'list' | 'grid';
 export type SortBy = 'name' | 'size' | 'modified';
-export type SortDir = 'asc' | 'desc';
+type SortDir = 'asc' | 'desc';
 
 const array = <T>(value: unknown): T[] => (Array.isArray(value) ? (value as T[]) : []);
 

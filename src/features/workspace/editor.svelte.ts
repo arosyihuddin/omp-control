@@ -4,7 +4,7 @@ import { basename, dirname } from '$lib/utils/workspace';
 import { prefs } from './preferences.svelte';
 import { readJson, readString, storageKeys, writeJson, writeString } from '$lib/utils/storage';
 
-export interface EditorTab {
+interface EditorTab {
   path: string;
   name: string;
   content: string;

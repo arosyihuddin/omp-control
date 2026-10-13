@@ -1,7 +1,15 @@
-/** @type {import("@sveltejs/vite-plugin-svelte").SvelteConfig} */
+import adapterBun from '@eslym/sveltekit-adapter-bun';
+import adapterStatic from '@sveltejs/adapter-static';
+
+const cloudflare = process.env.OMP_CONTROL_TARGET === 'cloudflare';
+
 export default {
-  // Enforce Svelte 5 runes across first-party code. Third-party components in
-  // node_modules (e.g. @lucide/svelte) keep their own compile mode.
+  kit: {
+    alias: { $features: './src/features' },
+    adapter: cloudflare
+      ? adapterStatic({ pages: 'dist', assets: 'dist', strict: false })
+      : adapterBun({ out: 'build', serveStatic: true, precompress: true, bundler: 'bun' }),
+  },
   vitePlugin: {
     dynamicCompileOptions({ filename }) {
       if (filename.includes('node_modules')) return undefined;

@@ -11,6 +11,7 @@ export { default as Input } from './Input.svelte';
 export { default as KeyValue } from './KeyValue.svelte';
 export { default as Menu } from './Menu.svelte';
 export { default as MenuItem } from './MenuItem.svelte';
+export { default as OptionDropdown } from './OptionDropdown.svelte';
 export { default as Meter } from './Meter.svelte';
 export { default as Modal } from './Modal.svelte';
 export { default as Panel } from './Panel.svelte';

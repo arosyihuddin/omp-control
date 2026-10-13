@@ -1,14 +1,24 @@
 export type RiskLevel = 'low' | 'medium' | 'high' | 'isolated';
 
+export type ToolPermission = 'always_allow' | 'require_approval' | 'blocked' | 'custom';
+export type ToolPermissionSection = 'read_only' | 'edit_delete' | 'other';
+export type ToolCustomRule = 'approval' | 'high_risk' | 'block_high_risk';
+
 export interface Tool {
   name: string;
   group: string;
   risk: RiskLevel;
   description: string;
   exposed: boolean;
+  section: ToolPermissionSection;
+  permission: ToolPermission;
+  permissionOverride: ToolPermission | null;
+  sectionPermission: ToolPermission;
+  customRule: ToolCustomRule;
+  sectionCustomRule: ToolCustomRule;
 }
 
-export interface SessionMessage {
+interface SessionMessage {
   id: string;
   role: 'user' | 'assistant' | 'tool';
   content: string;
@@ -36,7 +46,7 @@ export interface Session {
   messages?: SessionMessage[];
 }
 
-export type ApprovalStatus = 'pending' | 'approved' | 'denied' | 'expired' | 'cancelled';
+type ApprovalStatus = 'pending' | 'approved' | 'denied' | 'expired' | 'cancelled';
 export type ApprovalDecision = 'approve' | 'approve-session' | 'deny';
 
 export interface Approval {
@@ -86,7 +96,7 @@ export interface WorkspaceItem {
   ignored?: boolean;
 }
 
-export interface GpuDevice {
+interface GpuDevice {
   name?: string;
   utilization_gpu_percent?: number;
   temperature_c?: number;

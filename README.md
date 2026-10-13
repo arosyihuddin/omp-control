@@ -16,7 +16,7 @@ Requirements: Bun.
     bun install
     bun run dev
 
-The development command starts the control API and Vite UI together. Vite proxies `/control` to the control API at `http://127.0.0.1:48767`. Runtime API and WebSocket requests are routed through the selected instance; the browser does not need a direct runtime URL or an `OMP_MCP_BACKEND` setting.
+The development command starts one Bun-backed SvelteKit server on port `5173`. The control API, UI, runtime proxy, SSE, and terminal WebSocket upgrade are handled by the same server; there is no separate API listener or `scripts/dev.sh`. Runtime API and WebSocket requests are routed through the selected instance, so the browser does not need a direct runtime URL or an `OMP_MCP_BACKEND` setting.
 
 ### 🗃️ Instance registry
 
@@ -24,13 +24,13 @@ The registry API uses Bun SQLite and stores its database at `./data/omp-control.
 
 ### 🔐 Authentication and security
 
-Authentication is enabled by default. On first launch, create the administrator account through the setup page; usernames must be 3–64 characters and passwords at least 12 characters. The first account can only be created once. Login sessions use random opaque tokens stored as SHA-256 hashes in SQLite and an HttpOnly, SameSite=Strict cookie. The API sets the cookie's Secure attribute automatically based on the browser request's Origin scheme (HTTPS gets Secure; HTTP local development does not), with the request URL as fallback. All control API and runtime proxy endpoints require an authenticated session; `/healthz` remains public. The API binds to loopback by default; do not expose it publicly without HTTPS and appropriate network controls.
+Authentication is enabled by default. On first launch, create the administrator account through the setup page; usernames must be 3–64 characters and passwords at least 12 characters. The first account can only be created once. Login sessions use random opaque tokens stored as SHA-256 hashes in SQLite and an HttpOnly, SameSite=Strict cookie. The API sets the cookie's Secure attribute automatically based on the browser request's Origin scheme (HTTPS gets Secure; HTTP local development does not), with the request URL as fallback. All control API and runtime proxy endpoints require an authenticated session; `/healthz` remains public. The standalone Bun adapter listens on `0.0.0.0:3000` by default (`HTTP_HOST` and `HTTP_PORT` can override this). When running behind a reverse proxy or Cloudflare Tunnel, prefer `HTTP_HOST=127.0.0.1`; do not expose the service publicly without HTTPS and appropriate network controls.
 
 ## ☁️ Cloudflare Workers deployment
 
 OMP Control supports two deployment modes:
 
-- **Bun / self-hosted:** keeps the existing `server/index.ts`, local SQLite database, and local `cloudflared` tunnel controls.
+- **Bun / self-hosted:** builds a standalone SvelteKit server with the Bun adapter, local SQLite database, and local `cloudflared` tunnel controls. Run `bun run build` and then `bun run start`; the UI and control API share one listener.
 - **Cloudflare Workers:** serves the Vite-built frontend and runs the control API in `cloudflare/worker.ts`; persistent registry and auth data live in Cloudflare D1.
 
 ### First-time setup
@@ -58,7 +58,7 @@ The setup script will not overwrite a configured database ID or silently create 
 
 After deployment, open the Worker URL and create the first administrator account in the setup screen.
 
-For local Worker emulation, run `bun run cf:migrate:local` once, then `bun run cf:dev`.
+For local Worker emulation, run `bun run cf:migrate:local` once, then `bun run cf:dev`. The `cf:dev` and `cf:deploy` scripts build the static Cloudflare target automatically; the normal `build` script creates the standalone Bun server instead.
 
 **Cloudflare-mode differences:** OMP instances must be reachable from Cloudflare over HTTPS. The browser terminal WebSocket proxy is intended for instances without bearer credentials; authenticated WebSocket proxying remains unsupported. The local `cloudflared` process manager cannot run inside Workers, so tunnel creation and process controls are disabled in this mode and must be managed separately. The self-hosted Bun mode is unchanged.
 

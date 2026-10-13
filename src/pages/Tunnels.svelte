@@ -1,9 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { AlertTriangle, ArrowUpRight, Check, Copy, Globe, LoaderCircle, Plus, Square } from '@lucide/svelte';
-  import { errorMessage, tunnelsApi, type CloudflaredStatus, type TunnelInfo } from '$lib/api';
-  import { runtimeUrl } from '$lib/api/runtime-url';
-  import { Panel } from '$lib/components/ui';
+  import { errorMessage, normalizeTunnelInfo, tunnelsApi, type CloudflaredStatus, type TunnelInfo } from '$lib/api';
+    import { Panel } from '$lib/components/ui';
 
   let port = $state('5173');
   let tunnels = $state<TunnelInfo[]>([]);
@@ -17,7 +16,7 @@
 
   const activeTunnels = $derived(tunnels.filter((tunnel) => ['starting', 'active', 'stopping'].includes(tunnel.status)));
   const busy = $derived(starting);
-  const tunnelUnavailable = $derived(!checkingCloudflared && cloudflared?.available === false);
+  const tunnelUnavailable = $derived(!checkingCloudflared && (!cloudflared || cloudflared.available === false || cloudflared.installed === false));
   async function startTunnel(event: SubmitEvent) {
     event.preventDefault();
     if (busy) return;
@@ -73,11 +72,11 @@
         loading = false;
         return;
       }
-      events = new EventSource(runtimeUrl('/control/v1/tunnels/events'));
+      events = new EventSource(tunnelsApi.eventsUrl());
       events.addEventListener('tunnels', (event) => {
         try {
-          const data = JSON.parse((event as MessageEvent<string>).data) as { tunnels: TunnelInfo[] };
-          tunnels = data.tunnels ?? [];
+          const data = JSON.parse((event as MessageEvent<string>).data) as { tunnels: Parameters<typeof normalizeTunnelInfo>[0][] };
+          tunnels = (data.tunnels ?? []).map(normalizeTunnelInfo);
           loading = false;
           error = '';
         } catch {
@@ -87,13 +86,17 @@
       events.onerror = () => {
         // EventSource reconnects automatically; keep the last known tunnel state visible.
       };
-    }).catch(() => { cloudflared = null; }).finally(() => { checkingCloudflared = false; });
+    }).catch(() => {
+      cloudflared = null;
+      loading = false;
+      error = 'Tunnel API unavailable. Check the selected instance credential and OMP_TUNNEL_API_TOKEN.';
+    }).finally(() => { checkingCloudflared = false; });
     return () => events?.close();
   });
 </script>
 
 <div class="flex w-full min-w-0 flex-col gap-4">
-  <Panel title="Cloudflare Tunnel status" description="Checks whether cloudflared is installed on the OMP Control API host.">
+  <Panel title="Cloudflare Tunnel status" description="Checks whether cloudflared is installed on the selected OMP-MCP instance.">
     <div class="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
       <div class="flex min-w-0 items-start gap-3">
         <span class={[(checkingCloudflared ? 'bg-warning' : cloudflared?.installed ? 'bg-success' : 'bg-danger'), 'mt-1 size-2.5 shrink-0 rounded-full']}></span>
@@ -102,26 +105,26 @@
           {#if cloudflared?.version}<p class="mt-1 break-all text-xs text-fg-muted">{cloudflared.version}</p>{/if}
           {#if cloudflared?.path}<p class="mt-1 break-all font-mono text-xs text-fg-faint">{cloudflared.path}</p>{/if}
           {#if !checkingCloudflared && cloudflared === null}<p class="mt-1 text-xs text-fg-muted">Could not check the API host. Check the connection and try again.</p>{/if}
-          {#if !checkingCloudflared && cloudflared?.available === false}<p class="mt-1 text-xs text-fg-muted">{cloudflared.reason ?? "Manage tunnels separately from this Worker deployment."}</p>{:else if !checkingCloudflared && cloudflared && !cloudflared.installed}<p class="mt-1 text-xs text-fg-muted">Install cloudflared on the machine running the OMP Control API to create tunnels.</p>{/if}
+          {#if !checkingCloudflared && cloudflared?.available === false}<p class="mt-1 text-xs text-fg-muted">{cloudflared.reason ?? "Manage tunnels separately from this Worker deployment."}</p>{:else if !checkingCloudflared && cloudflared && !cloudflared.installed}<p class="mt-1 text-xs text-fg-muted">Install cloudflared on the selected OMP-MCP host to create tunnels.</p>{/if}
         </div>
       </div>
       <button type="button" class="inline-flex h-8 shrink-0 items-center justify-center rounded-md border border-line px-3 text-xs font-medium text-fg-muted hover:bg-surface-hover" onclick={() => { checkingCloudflared = true; void tunnelsApi.status().then((status) => { cloudflared = status; }).catch(() => { cloudflared = null; }).finally(() => { checkingCloudflared = false; }); }}>Check again</button>
     </div>
   </Panel>
 
-  <Panel title="Create Quick Tunnel" description="Requires cloudflared installed on the machine running the OMP Control API.">
+  <Panel title="Create Quick Tunnel" description="Starts a Quick Tunnel on the selected OMP-MCP instance.">
     <form class="flex flex-col gap-3 p-4" onsubmit={startTunnel}>
       <label for="tunnel-port" class="text-sm font-medium text-fg">Local service port</label>
       <div class="flex flex-col gap-2 sm:flex-row">
         <div class="relative min-w-0 flex-1">
           <Globe size={15} class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fg-faint" />
-          <input id="tunnel-port" bind:value={port} type="number" min="1" max="65535" step="1" required placeholder="5173" class="h-9 w-full rounded-md border border-line bg-canvas pl-9 pr-3 text-sm text-fg outline-none transition-colors placeholder:text-fg-faint focus:border-accent" disabled={busy || tunnelUnavailable} />
+          <input id="tunnel-port" bind:value={port} type="number" min="1" max="65535" step="1" required placeholder="5173" class="h-9 w-full rounded-md border border-line bg-canvas pl-9 pr-3 text-sm text-fg outline-none transition-colors placeholder:text-fg-faint focus:border-accent" disabled={busy || checkingCloudflared || tunnelUnavailable} />
         </div>
-        <button type="submit" class="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md bg-accent px-4 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50" disabled={busy || tunnelUnavailable}>
+        <button type="submit" class="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md bg-accent px-4 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50" disabled={busy || checkingCloudflared || tunnelUnavailable}>
           {#if starting}<LoaderCircle size={15} class="animate-spin" /> Starting…{:else}<Plus size={15} /> Start tunnel{/if}
         </button>
       </div>
-      <p class="text-xs text-fg-faint">Enter the port of a service running on this machine, for example 5173, 3000, or 8000. Tunnel creation is available only in self-hosted mode.</p>
+      <p class="text-xs text-fg-faint">Enter the port of a service running on the selected OMP-MCP host, for example 5173, 3000, or 8000. Tunnel creation is available only in self-hosted mode.</p>
       {#if error}<p class="flex items-start gap-2 text-sm text-danger" role="alert"><AlertTriangle size={15} class="mt-0.5 shrink-0" />{error}</p>{/if}
     </form>
   </Panel>

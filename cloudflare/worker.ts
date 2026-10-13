@@ -209,6 +209,9 @@ async function instance(env: Env, id: string) {
 const exact: Record<string, string[]> = {
   "/api/dashboard": ["GET"],
   "/api/events": ["GET"],
+  "/api/tunnels": ["GET", "POST"],
+  "/api/tunnels/status": ["GET"],
+  "/api/tunnels/events": ["GET"],
   "/api/omp/config": ["GET", "PUT"],
   "/api/omp/config/reset": ["POST"],
   "/api/terminals": ["GET", "POST"],
@@ -237,6 +240,9 @@ const exact: Record<string, string[]> = {
 function allowed(path: string, method: string) {
   if (exact[path]?.includes(method)) return true;
   if (/^\/api\/terminals\/[^/]+$/.test(path)) return method === "DELETE";
+  if (/^\/api\/tunnels\/[^/]+$/.test(path)) return method === "GET";
+  if (/^\/api\/tunnels\/[^/]+\/logs$/.test(path)) return method === "GET";
+  if (/^\/api\/tunnels\/[^/]+\/stop$/.test(path)) return method === "POST" || method === "DELETE";
   if (/^\/api\/tools\/[^/]+$/.test(path)) return method === "PATCH";
   if (/^\/api\/approvals\/[^/]+\/(approve|approve-session|deny)$/.test(path))
     return method === "POST";
@@ -292,7 +298,7 @@ async function proxy(
     };
     if (req.method !== "GET" && req.method !== "HEAD")
       init.body = await req.arrayBuffer();
-    if (path !== "/api/events") init.signal = AbortSignal.timeout(15000);
+    if (path !== "/api/events" && path !== "/api/tunnels/events") init.signal = AbortSignal.timeout(15000);
     const upstream = await fetch(target, init);
     const out = new Headers();
     for (const k of [
@@ -307,7 +313,7 @@ async function proxy(
       const v = upstream.headers.get(k);
       if (v) out.set(k, v);
     }
-    if (path === "/api/events") {
+    if (path === "/api/events" || path === "/api/tunnels/events") {
       out.set("content-type", "text/event-stream; charset=utf-8");
       out.set("cache-control", "no-cache, no-store, must-revalidate");
       out.set("x-accel-buffering", "no");
@@ -487,23 +493,6 @@ async function handle(req: Request, env: Env): Promise<Response> {
       !(await authenticated(req, env))
     )
       return fail("UNAUTHENTICATED", "Please log in to continue", 401);
-    if (path.startsWith("/control/v1/tunnels")) {
-      if (path.endsWith("/status"))
-        return json({
-          installed: false,
-          path: null,
-          version: null,
-          available: false,
-          reason:
-            "Cloudflare Workers cannot spawn cloudflared processes; manage tunnels separately.",
-        });
-      if (req.method === "GET") return json({ tunnels: [] });
-      return fail(
-        "TUNNELS_UNSUPPORTED",
-        "Manage Cloudflare Tunnels outside OMP Control when deployed on Workers",
-        501,
-      );
-    }
     const runtime = url.pathname.match(
       /^\/control\/v1\/instances\/([^/]+)\/runtime(\/.*)$/,
     );

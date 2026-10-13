@@ -33,3 +33,9 @@ data/*.sqlite-*
 
 # Cloudflare local state
 .wrangler/
+
+# SvelteKit generated files
+.svelte-kit/
+
+# Bun/SvelteKit server build
+/build/
