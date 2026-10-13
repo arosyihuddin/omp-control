@@ -50,7 +50,6 @@
         <span class="flex size-4 shrink-0 items-center justify-center">{#if value === option.value}<Check size={14} strokeWidth={2} />{/if}</span>
         <span class="min-w-0 flex-1">
           <span class="block">{option.label}</span>
-          {#if option.description}<span class="mt-0.5 block text-xs font-normal text-fg-subtle">{option.description}</span>{/if}
         </span>
       </MenuItem>
     {/each}

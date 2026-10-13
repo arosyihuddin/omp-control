@@ -167,15 +167,21 @@
 
     <div class="flex min-w-0 shrink-0 flex-col gap-2 sm:w-[280px]">
       {#if setting.type === 'boolean'}
-        <div class="flex min-h-8 items-center justify-between rounded-md px-1.5">
-          <span class="text-xs text-fg-subtle">{boolDraft ? 'Enabled' : 'Disabled'}</span>
+        <div class="flex min-h-8 items-center justify-end gap-2 rounded-md px-1.5">
           <Switch checked={boolDraft} label={setting.label} onchange={(checked) => saveNow(checked)} />
+          <Button size="sm" variant="ghost" disabled={saving} onclick={reset}>
+            <RotateCcw size={13} />
+            Reset
+          </Button>
         </div>
       {:else if useSelect}
-        <OptionDropdown options={choices} value={draft} label={setting.label} width="w-full" class="w-full" disabled={saving} onchange={(value) => saveNow(value)} />
-        {#if choices.find((option) => option.value === draft)?.description}
-          <p class="text-[11px] leading-relaxed text-fg-faint">{choices.find((option) => option.value === draft)?.description}</p>
-        {/if}
+        <div class="flex min-w-0 items-center gap-2">
+          <OptionDropdown options={choices} value={draft} label={setting.label} width="w-full" class="min-w-0 flex-1" disabled={saving} onchange={(value) => saveNow(value)} />
+          <Button size="sm" variant="ghost" disabled={saving} onclick={reset}>
+            <RotateCcw size={13} />
+            Reset
+          </Button>
+        </div>
       {:else if setting.type === 'array' || setting.type === 'record'}
         <button type="button" onclick={openStructuredEditor} class="flex min-h-10 w-full items-center justify-between rounded-md border border-line/80 bg-surface px-3 text-left text-xs text-fg-subtle transition-colors hover:border-line-strong hover:bg-surface-raised hover:text-fg">
           <span>{setting.type === 'array' ? 'Edit list items' : 'Edit fields'}</span>
@@ -193,13 +199,15 @@
         />
       {/if}
 
-      <div class="flex items-center justify-between gap-2 px-1.5">
-        <span class="text-[11px] text-fg-faint">{#if saving}Menyimpan…{:else}Auto-save aktif{/if}</span>
-        <Button size="sm" variant="ghost" disabled={saving} onclick={reset}>
-          <RotateCcw size={13} />
-          Reset
-        </Button>
-      </div>
+      {#if setting.type !== 'boolean' && !useSelect}
+        <div class="flex items-center justify-between gap-2 px-1.5">
+          {#if saving}<span class="text-[11px] text-fg-faint">Menyimpan…</span>{/if}
+          <Button size="sm" variant="ghost" disabled={saving} onclick={reset}>
+            <RotateCcw size={13} />
+            Reset
+          </Button>
+        </div>
+      {/if}
       {#if error}
         <p role="alert" class="px-1.5 text-xs leading-relaxed text-danger">{error}</p>
       {/if}
@@ -243,7 +251,7 @@
   </div>
   {#snippet footer()}
     <div class="flex w-full items-center justify-between gap-3">
-      <span class="text-[11px] text-fg-faint">{#if saving}Menyimpan…{:else}Auto-save aktif{/if}</span>
+      {#if saving}<span class="text-[11px] text-fg-faint">Menyimpan…</span>{/if}
       <Button size="sm" variant="secondary" onclick={() => (editorOpen = false)}>Selesai</Button>
     </div>
   {/snippet}
