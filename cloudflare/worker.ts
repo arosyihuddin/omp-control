@@ -295,12 +295,21 @@ async function proxy(
     const init: RequestInit = {
       method: req.method,
       headers,
-      redirect: "error",
+      // Cloudflare Workers supports only "follow" and "manual".
+      // Keep redirects blocked so runtime URLs cannot redirect the proxy elsewhere.
+      redirect: "manual",
     };
     if (req.method !== "GET" && req.method !== "HEAD")
       init.body = await req.arrayBuffer();
     if (path !== "/api/events" && path !== "/api/tunnels/events") init.signal = AbortSignal.timeout(15000);
     const upstream = await fetch(target, init);
+    if (upstream.status >= 300 && upstream.status < 400) {
+      return fail(
+        "RUNTIME_REDIRECT_BLOCKED",
+        "The runtime endpoint returned a redirect. Configure the instance with its final URL.",
+        502,
+      );
+    }
     const out = new Headers();
     for (const k of [
       "content-type",
@@ -552,7 +561,8 @@ async function handle(req: Request, env: Env): Promise<Response> {
           const response = await fetch(target, {
             headers,
             signal: AbortSignal.timeout(4000),
-            redirect: "error",
+            // Do not follow redirects, but use a mode supported by Workers.
+            redirect: "manual",
           });
           if (!response.ok)
             throw new Error("Runtime returned HTTP " + response.status);
