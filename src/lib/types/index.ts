@@ -105,6 +105,7 @@ export interface DashboardSnapshot {
   toolCount?: number;
   toolRiskCounts?: Partial<Record<RiskLevel, number>>;
   approvalCount?: number;
+  toolCallsToday?: number;
 }
 
 export interface Profile {

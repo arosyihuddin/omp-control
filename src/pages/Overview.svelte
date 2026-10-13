@@ -58,6 +58,7 @@
 
     <section aria-label="Key metrics" class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <a href="/tools" class="group rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-accent"><StatCard label="Registered tools" value={dashboard.toolCount} hint="Available system capabilities" /></a>
+      <StatCard label="Tool calls today" value={dashboard.toolCallsToday.toLocaleString()} hint="Since 00:00 WIB" />
       <a href="/approvals" class="group rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-accent"><StatCard label="Pending approvals" value={dashboard.pendingApprovals} hint={dashboard.pendingApprovals ? 'Action required · review requests' : 'No requests waiting'} /></a>
       <StatCard label="Server status" hint="Remote telemetry connection">
         {#snippet valueSlot()}
