@@ -23,9 +23,9 @@
   --c-fg-subtle: 115 115 115;
   --c-fg-faint: 163 163 163;
 
-  --c-accent: 23 23 23;
-  --c-accent-hover: 38 38 38;
-  --c-accent-fg: 250 250 250;
+  --c-accent: 94 106 210;
+  --c-accent-hover: 79 91 196;
+  --c-accent-fg: 255 255 255;
 
   --c-success: 45 157 107;
   --c-warning: 197 139 12;
@@ -53,9 +53,9 @@
   --c-fg-subtle: 163 163 163;
   --c-fg-faint: 115 115 115;
 
-  --c-accent: 229 229 229;
-  --c-accent-hover: 245 245 245;
-  --c-accent-fg: 23 23 23;
+  --c-accent: 124 134 232;
+  --c-accent-hover: 94 106 210;
+  --c-accent-fg: 255 255 255;
 
   --c-success: 76 183 130;
   --c-warning: 242 201 76;
