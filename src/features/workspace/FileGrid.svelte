@@ -17,7 +17,7 @@
 
   let { items, basePath, actions, rows, emptyText }: Props = $props();
 
-  const card = 'group relative min-w-0 rounded-lg border border-line bg-surface-raised transition-colors hover:bg-surface-hover';
+  const card = 'group relative min-w-0 rounded-xl border border-line bg-surface-raised transition-colors hover:bg-surface-hover';
   const tile = 'flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-surface-active/60';
 </script>
 

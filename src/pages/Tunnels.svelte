@@ -89,7 +89,7 @@
     }).catch(() => {
       cloudflared = null;
       loading = false;
-      error = 'Tunnel API unavailable. Check the selected instance credential and OMP_TUNNEL_API_TOKEN.';
+      error = 'OMP-MCP API unavailable. Check the selected instance credential and OMP_API_TOKEN on the OMP-MCP host.';
     }).finally(() => { checkingCloudflared = false; });
     return () => events?.close();
   });

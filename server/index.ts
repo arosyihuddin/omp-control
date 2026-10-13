@@ -193,18 +193,26 @@ async function proxyRuntime(req: Request, instanceId: string, path: string, inco
 }
 
 
-function upgradeRuntimeSocket(req: Request, platform: any, instanceId: string, path: string, incoming: URL) {
+async function upgradeRuntimeSocket(req: Request, platform: any, instanceId: string, path: string, incoming: URL): Promise<Response> {
   const row = db.query("SELECT base_url,credential FROM instances WHERE id = ?").get(instanceId) as { base_url: string; credential: string | null } | null;
   if (!row) return fail("NOT_FOUND", "Instance not found", 404);
-  if (path !== "/api/terminal/socket" || row.credential) {
-    return fail("RUNTIME_WEBSOCKET_UNSUPPORTED", row.credential ? "Terminal WebSocket proxy does not support bearer credentials yet" : "WebSocket route is not allowed", 501);
+  if (path !== "/api/terminal/socket") {
+    return fail("RUNTIME_WEBSOCKET_UNSUPPORTED", "WebSocket route is not allowed", 501);
   }
+  let upstream: WebSocket | undefined;
   try {
     const target = validateBaseUrl(row.base_url);
     target.protocol = target.protocol === "https:" ? "wss:" : "ws:";
     target.pathname = (target.pathname + path).replace(/\/+/g, "/");
     target.search = incoming.search;
-    const upstream = new WebSocket(target.toString());
+    const BunWebSocket = WebSocket as unknown as new (
+      url: string,
+      options?: { headers?: Record<string, string> },
+    ) => WebSocket;
+    upstream = new BunWebSocket(
+      target.toString(),
+      row.credential ? { headers: { Authorization: `Bearer ${row.credential}` } } : undefined,
+    );
     const data: any = {
       upstream,
       pending: [] as Array<string | ArrayBuffer | Blob>,
@@ -216,7 +224,6 @@ function upgradeRuntimeSocket(req: Request, platform: any, instanceId: string, p
         state.clientReady = true;
         for (const message of state.pending) ws.send(message);
         state.pending.length = 0;
-        state.upstream.addEventListener("close", () => { try { ws.close(); } catch {} });
       },
       message(ws: any, message: string | Buffer) {
         const state = ws.data as typeof data;
@@ -226,7 +233,7 @@ function upgradeRuntimeSocket(req: Request, platform: any, instanceId: string, p
       close(ws: any) { try { (ws.data as typeof data).upstream.close(); } catch {} },
     };
     upstream.addEventListener("open", () => {
-      for (const message of data.pendingClient) upstream.send(message);
+      for (const message of data.pendingClient) upstream?.send(message);
       data.pendingClient.length = 0;
     });
     upstream.addEventListener("message", (event) => {
@@ -236,12 +243,31 @@ function upgradeRuntimeSocket(req: Request, platform: any, instanceId: string, p
     upstream.addEventListener("close", () => {
       if (data.clientReady && data.client?.readyState === 1) data.client.close();
     });
-    if (!platform?.upgrade || !platform.upgrade(data)) {
+    upstream.addEventListener("error", () => {
+      if (data.clientReady && data.client?.readyState === 1) {
+        try { data.client.send(JSON.stringify({ type: "error", message: "Runtime WebSocket connection failed" })); } catch {}
+        try { data.client.close(1011, "Runtime WebSocket connection failed"); } catch {}
+      }
+    });
+    await new Promise<void>((resolve, reject) => {
+      if (upstream?.readyState === WebSocket.OPEN) {
+        resolve();
+        return;
+      }
+      const timer = setTimeout(() => reject(new Error("Timed out connecting to runtime terminal")), 5000);
+      upstream?.addEventListener("open", () => { clearTimeout(timer); resolve(); }, { once: true });
+      upstream?.addEventListener("error", () => { clearTimeout(timer); reject(new Error("Runtime WebSocket connection failed")); }, { once: true });
+    });
+    const upgraded = Boolean(platform?.upgrade && platform.upgrade(data));
+    if (!upgraded) {
+      console.error("[terminal-ws] browser upgrade failed", { instanceId, hasPlatform: Boolean(platform), hasUpgrade: typeof platform?.upgrade === "function" });
       upstream.close();
       return fail("WEBSOCKET_UPGRADE_FAILED", "Unable to upgrade terminal connection", 400);
     }
     return new Response(null);
   } catch (error) {
+    console.error("[terminal-ws] connection failed", { instanceId, error: error instanceof Error ? error.message : String(error) });
+    try { upstream?.close(); } catch {}
     return fail("RUNTIME_UNAVAILABLE", error instanceof Error ? error.message : "Unable to connect terminal", 502);
   }
 }
@@ -289,7 +315,7 @@ export async function handleControlRequest(req: Request, server?: any): Promise<
 
     const runtimeMatch = url.pathname.match(/^\/control\/v1\/instances\/([^/]+)\/runtime(\/.*)$/);
     if (runtimeMatch && runtimeMatch[2] === "/api/terminal/socket" && req.headers.get("upgrade")?.toLowerCase() === "websocket") {
-      return upgradeRuntimeSocket(req, server, decodeURIComponent(runtimeMatch[1]), runtimeMatch[2], url) as Response;
+      return await upgradeRuntimeSocket(req, server, decodeURIComponent(runtimeMatch[1]), runtimeMatch[2], url);
     }
     if (runtimeMatch) return await proxyRuntime(req, decodeURIComponent(runtimeMatch[1]), runtimeMatch[2], url);
     if (url.pathname === "/control/v1/instances" && req.method === "GET") return send({ instances: (listRows() as Row[]).map(publicInstance) });

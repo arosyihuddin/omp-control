@@ -19,7 +19,7 @@
 {#if items.length === 0}
   <EmptyState icon={FileClock} title="No approval history" description="Completed approval decisions will appear here." />
 {:else}
-  <div class="divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface">
+  <div class="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
     {#each visible as approval (approval.id)}
       {@const Icon = decisionIcon(approval)}
       {@const open = expandedId === approval.id}

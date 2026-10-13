@@ -212,6 +212,7 @@ const exact: Record<string, string[]> = {
   "/api/tunnels": ["GET", "POST"],
   "/api/tunnels/status": ["GET"],
   "/api/tunnels/events": ["GET"],
+  "/api/models": ["GET"],
   "/api/omp/config": ["GET", "PUT"],
   "/api/omp/config/reset": ["POST"],
   "/api/terminals": ["GET", "POST"],
@@ -333,12 +334,6 @@ async function proxy(
 async function websocketProxy(req: Request, env: Env, id: string, url: URL) {
   const row = await instance(env, id);
   if (!row) return fail("NOT_FOUND", "Instance not found", 404);
-  if (row.credential)
-    return fail(
-      "RUNTIME_WEBSOCKET_UNSUPPORTED",
-      "Terminal WebSocket proxy with bearer credentials is not supported",
-      501,
-    );
   try {
     const target = validateBase(row.base_url);
     target.protocol = target.protocol === "https:" ? "https:" : "http:";
@@ -347,7 +342,9 @@ async function websocketProxy(req: Request, env: Env, id: string, url: URL) {
       "/",
     );
     target.search = url.search;
-    const response = await fetch(target, { headers: { Upgrade: "websocket" } });
+    const headers = new Headers({ Upgrade: "websocket" });
+    if (row.credential) headers.set("authorization", "Bearer " + row.credential);
+    const response = await fetch(target, { headers });
     const upstream = (response as Response & { webSocket?: WebSocket })
       .webSocket;
     if (!upstream)

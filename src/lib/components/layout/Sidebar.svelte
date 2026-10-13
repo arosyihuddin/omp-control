@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { ChevronDown, Folder, PanelLeft, Settings } from '@lucide/svelte';
-  import { mainNav, ompNav, routes, workspaceNav } from '$lib/routes';
+  import { ChevronDown, Folder, PanelLeft } from '@lucide/svelte';
+  import { configNav, isOmpConfigRoute, mainNav, routes, workspaceNav } from '$lib/routes';
   import { dashboard } from '$lib/stores/dashboard.svelte';
   import { router } from '$lib/stores/router.svelte';
   import { ui } from '$lib/stores/ui.svelte';
@@ -12,7 +12,7 @@
   let ompOpen = $state(false);
 
   $effect(() => {
-    if (router.current === 'omp-config' || router.current === 'sessions') ompOpen = true;
+    if (isOmpConfigRoute(router.current) || router.current === 'sessions') ompOpen = true;
   });
 
   function onOmpClick() {
@@ -21,7 +21,6 @@
   }
 
   function onWorkspaceClick() {
-    // In the collapsed rail there is no room for children: jump to Files.
     if (collapsed && window.matchMedia('(min-width: 768px)').matches) router.navigate('workspace-files');
     else workspaceOpen = !workspaceOpen;
   }
@@ -106,29 +105,28 @@
         class={[
           'flex h-8 w-full items-center gap-2.5 rounded-md px-2.5 text-base transition-colors',
           collapsed && 'md:justify-center md:px-0',
-          (router.current === 'omp-config' || router.current === 'sessions') && (collapsed || !ompOpen) ? 'bg-surface-active text-fg' : 'text-fg-subtle hover:bg-surface-hover hover:text-fg',
+          (isOmpConfigRoute(router.current) || router.current === 'sessions') && (collapsed || !ompOpen) ? 'bg-surface-active text-fg' : 'text-fg-subtle hover:bg-surface-hover hover:text-fg',
         ]}
         onclick={onOmpClick}
         aria-expanded={ompOpen}
         title={collapsed ? 'OMP' : undefined}
       >
-        <Settings size={16} strokeWidth={1.8} class="shrink-0" />
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" class="shrink-0" aria-hidden="true">
+          <circle cx="12" cy="12" r="7" />
+          <path d="M12 2.5V21.5" stroke-linecap="round" />
+        </svg>
         <span class={['truncate', collapsed && 'md:hidden']}>OMP</span>
         <ChevronDown size={13} strokeWidth={1.8} class={['ml-auto transition-transform', !ompOpen && '-rotate-90', collapsed && 'md:hidden']} />
       </button>
       {#if ompOpen}
-        <div class={['ml-[17px] mt-0.5 space-y-0.5 border-l border-line pl-2', collapsed && 'md:hidden']}>
-          {#each ompNav as id (id)}
+        <div class={['ml-[17px] mt-1 space-y-1 border-l border-line pl-2', collapsed && 'md:hidden']}>
+          <div class="px-2 pt-1 text-[10px] font-semibold uppercase tracking-wider text-fg-faint">OMP Configuration</div>
+          {#each configNav as id (id)}
             {@const route = routes[id]}
-            <SidebarItem
-              nested
-              href={route.path}
-              icon={route.icon}
-              label={route.title}
-              active={router.current === id}
-              onclick={(event) => router.link(event, id)}
-            />
+            <SidebarItem nested href={route.path} icon={route.icon} label={route.title} active={router.current === id} onclick={(event) => router.link(event, id)} />
           {/each}
+          <div class="mt-2 border-t border-line px-2 pt-2 text-[10px] font-semibold uppercase tracking-wider text-fg-faint">OMP Sessions</div>
+          <SidebarItem nested href={routes.sessions.path} icon={routes.sessions.icon} label={routes.sessions.title} active={router.current === 'sessions'} onclick={(event) => router.link(event, 'sessions')} />
         </div>
       {/if}
     </div>

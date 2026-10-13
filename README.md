@@ -82,7 +82,7 @@ Base URLs must be HTTP(S), must not contain embedded credentials/query/fragment,
 
 ## 📚 Documentation
 
-- `docs/API_CONTRACT.md` — API model and rollout plan.
+- `STYLEGUIDE.md` — visual design principles, light/dark palette, surface and card rules, and UI implementation conventions.
 
 ## 🧩 Related project
 

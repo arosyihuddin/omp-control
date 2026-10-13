@@ -26,7 +26,7 @@
 {#if items.length === 0 && !rows.creating}
   <EmptyState title={emptyText} />
 {:else}
-  <div class="overflow-hidden rounded-lg border border-line bg-surface-raised">
+  <div class="overflow-hidden rounded-xl border border-line bg-surface-raised">
     <div class={['eyebrow grid gap-3 border-b border-line px-4 py-2', cols]}>
       <span>Name</span>
       <span class="hidden sm:block">Size</span>

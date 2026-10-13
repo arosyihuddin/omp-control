@@ -21,7 +21,7 @@
     <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       <button
         type="button"
-        class="flex items-center gap-3 rounded-lg border border-line bg-surface-raised p-3.5 text-left transition-colors hover:bg-surface-hover"
+        class="flex items-center gap-3 rounded-xl border border-line bg-surface-raised p-3.5 text-left transition-colors hover:bg-surface-hover"
         onclick={() => openPath('.', 'Home', 'directory')}
       >
         <Home size={17} class="shrink-0 text-accent-hover" />
@@ -35,7 +35,7 @@
         <div class="group relative">
           <button
             type="button"
-            class="flex w-full items-center gap-3 rounded-lg border border-line bg-surface-raised p-3.5 pr-11 text-left transition-colors hover:bg-surface-hover"
+            class="flex w-full items-center gap-3 rounded-xl border border-line bg-surface-raised p-3.5 pr-11 text-left transition-colors hover:bg-surface-hover"
             onclick={() => openPath(favorite.path, favorite.name, favorite.type ?? 'directory')}
           >
             <FileIcon item={{ name: favorite.name, type: favorite.type ?? 'directory' }} size={17} />
@@ -70,7 +70,7 @@
         {#each prefs.recents as recent (recent.path)}
           <button
             type="button"
-            class="flex items-center gap-3 rounded-lg border border-line p-3 text-left transition-colors hover:bg-surface-hover"
+            class="flex items-center gap-3 rounded-xl border border-line p-3 text-left transition-colors hover:bg-surface-hover"
             onclick={() => openPath(recent.path, recent.name, 'directory')}
           >
             <FileIcon item={{ name: recent.name, type: 'directory' }} />

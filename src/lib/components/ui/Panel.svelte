@@ -19,7 +19,7 @@
   let { title, description, tag, tagTone = 'neutral', leading, actions, class: className, children }: Props = $props();
 </script>
 
-<section class={['flex min-h-0 flex-col overflow-hidden rounded-lg border border-line bg-surface-raised shadow-card', className]}>
+<section class={['flex min-h-0 flex-col overflow-hidden rounded-xl border border-line bg-surface-raised', className]}>
   <header class="flex min-h-12 items-center justify-between gap-3 border-b border-line px-4 py-2.5">
     <div class="flex min-w-0 items-center gap-2">
       {@render leading?.()}

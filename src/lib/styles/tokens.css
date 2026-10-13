@@ -1,5 +1,5 @@
 /*
- * Design tokens — Linear-inspired palette.
+ * Design tokens — Orca-inspired monochrome palette.
  *
  * Colours are RGB channel triplets so Tailwind can apply opacity modifiers
  * (e.g. `bg-accent/10`). Components must only reference semantic tokens
@@ -9,59 +9,59 @@
 :root {
   color-scheme: light;
 
-  --c-canvas: 246 246 247;          /* sidebar + top bar */
-  --c-surface: 255 255 255;         /* main content panel */
-  --c-surface-raised: 251 251 252;  /* cards on the panel */
-  --c-surface-hover: 244 244 246;
-  --c-surface-active: 236 236 239;
+  --c-canvas: 250 250 250;          /* app chrome */
+  --c-surface: 255 255 255;         /* main content surface */
+  --c-surface-raised: 255 255 255;  /* cards: separated by hairline borders */
+  --c-surface-hover: 245 245 245;
+  --c-surface-active: 234 234 234;
 
-  --c-line: 230 230 233;
-  --c-line-strong: 212 212 218;
+  --c-line: 229 229 229;
+  --c-line-strong: 212 212 212;
 
-  --c-fg: 27 28 31;
-  --c-fg-muted: 59 61 68;
-  --c-fg-subtle: 108 111 120;
-  --c-fg-faint: 154 156 164;
+  --c-fg: 10 10 10;
+  --c-fg-muted: 64 64 64;
+  --c-fg-subtle: 115 115 115;
+  --c-fg-faint: 163 163 163;
 
-  --c-accent: 94 106 210;           /* Linear indigo */
-  --c-accent-hover: 79 91 196;
-  --c-accent-fg: 255 255 255;
+  --c-accent: 23 23 23;
+  --c-accent-hover: 38 38 38;
+  --c-accent-fg: 250 250 250;
 
   --c-success: 45 157 107;
   --c-warning: 197 139 12;
   --c-danger: 217 63 63;
   --c-info: 47 127 209;
 
-  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04);
-  --shadow-pop: 0 8px 24px rgb(0 0 0 / 0.12), 0 0 0 1px rgb(0 0 0 / 0.04);
+  --shadow-card: 0 0 0 0 transparent;
+  --shadow-pop: 0 10px 24px rgb(0 0 0 / 0.18), 0 0 0 1px rgb(0 0 0 / 0.04);
 }
 
 .dark {
   color-scheme: dark;
 
-  --c-canvas: 8 9 10;
-  --c-surface: 15 16 17;
-  --c-surface-raised: 20 21 22;
-  --c-surface-hover: 25 26 27;
-  --c-surface-active: 32 33 36;
+  --c-canvas: 10 10 10;
+  --c-surface: 10 10 10;
+  --c-surface-raised: 23 23 23;
+  --c-surface-hover: 38 38 38;
+  --c-surface-active: 64 64 64;
 
-  --c-line: 35 37 42;
-  --c-line-strong: 52 52 58;
+  --c-line: 38 38 38;
+  --c-line-strong: 64 64 64;
 
-  --c-fg: 247 248 248;
-  --c-fg-muted: 208 214 224;
-  --c-fg-subtle: 138 143 152;
-  --c-fg-faint: 98 102 109;
+  --c-fg: 250 250 250;
+  --c-fg-muted: 212 212 212;
+  --c-fg-subtle: 163 163 163;
+  --c-fg-faint: 115 115 115;
 
-  --c-accent: 94 106 210;
-  --c-accent-hover: 113 112 255;
-  --c-accent-fg: 255 255 255;
+  --c-accent: 229 229 229;
+  --c-accent-hover: 245 245 245;
+  --c-accent-fg: 23 23 23;
 
   --c-success: 76 183 130;
   --c-warning: 242 201 76;
   --c-danger: 235 87 87;
   --c-info: 78 167 252;
 
-  --shadow-card: 0 0 0 1px rgb(255 255 255 / 0.02);
-  --shadow-pop: 0 8px 24px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(var(--c-line-strong));
+  --shadow-card: 0 0 0 0 transparent;
+  --shadow-pop: 0 10px 24px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(var(--c-line-strong));
 }

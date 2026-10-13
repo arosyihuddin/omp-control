@@ -123,6 +123,17 @@ export const approvalsApi = {
   clear: () => postJson('/api/approvals/clear'),
 };
 
+export interface OmpModelOption {
+  id: string;
+  name: string;
+  provider: string;
+  contextWindow?: number;
+}
+
+export const sessionsModelsApi = {
+  list: (cwd: string) => request<{ models: OmpModelOption[]; defaultModel: string | null }>(`/api/models?cwd=${enc(cwd)}`),
+};
+
 export const sessionsApi = {
   create: (input: { task: string; cwd: string; model?: string }) =>
     postJson<{ session: Session }>('/api/sessions', input).then((data) => data.session),

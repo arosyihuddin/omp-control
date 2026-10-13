@@ -2,7 +2,8 @@
   import { onMount, tick } from 'svelte';
   import { ArrowUp, Bot, Code2, Folder, FolderOpen, MessageSquare, Plus, Search, Square, Terminal, Trash2, X } from '@lucide/svelte';
   import MarkdownContent from '$lib/components/MarkdownContent.svelte';
-  import { errorMessage, sessionsApi } from '$lib/api';
+  import { errorMessage, sessionsApi, sessionsModelsApi, type OmpModelOption } from '$lib/api';
+  import OptionDropdown from '$lib/components/ui/OptionDropdown.svelte';
   import { dashboard } from '$lib/stores/dashboard.svelte';
   import PathPicker from '$lib/components/workspace/PathPicker.svelte';
   import { readString, writeString, storageKeys } from '$lib/utils/storage';
@@ -11,6 +12,15 @@
   let search = $state('');
   let cwd = $state('');
   let pickerOpen = $state(false);
+  let selectedModel = $state('');
+  let modelOptions = $state<OmpModelOption[]>([]);
+  let defaultModel = $state<string | null>(null);
+  let modelsLoading = $state(false);
+  let modelsError = $state('');
+  const sessionModelChoices = $derived([
+    { value: '', label: `OMP default · ${defaultModel ?? 'automatic'}` },
+    ...modelOptions.map((model) => ({ value: model.id, label: `${model.name} · ${model.provider}` })),
+  ]);
   let prompt = $state('');
   let newTaskMode = $state(false);
   let creating = $state(false);
@@ -48,13 +58,34 @@
     shouldAutoScroll = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
   }
 
+  async function loadModels(path: string) {
+    if (!path) {
+      modelOptions = [];
+      defaultModel = null;
+      return;
+    }
+    modelsLoading = true;
+    modelsError = '';
+    try {
+      const result = await sessionsModelsApi.list(path);
+      modelOptions = result.models;
+      defaultModel = result.defaultModel;
+      if (selectedModel && !modelOptions.some((model) => model.id === selectedModel)) selectedModel = '';
+    } catch (error) {
+      modelsError = errorMessage(error, 'Unable to load available models');
+      modelOptions = [];
+    } finally {
+      modelsLoading = false;
+    }
+  }
+
   async function createSession(event?: SubmitEvent) {
     event?.preventDefault();
     if (creating || !prompt.trim() || !cwd.trim()) return;
     creating = true;
     formError = '';
     try {
-      const session = await sessionsApi.create({ task: prompt.trim(), cwd: cwd.trim() });
+      const session = await sessionsApi.create({ task: prompt.trim(), cwd: cwd.trim(), ...(selectedModel ? { model: selectedModel } : {}) });
       dashboard.sessions = [session, ...dashboard.sessions.filter((s) => s.sessionId !== session.sessionId)];
       selectedId = session.sessionId;
       newTaskMode = false;
@@ -68,12 +99,13 @@
   }
 
   function openDirectoryPicker() { pickerOpen = true; }
-  function chooseDirectory(path: string) {
+  async function chooseDirectory(path: string) {
     cwd = path;
     writeString(storageKeys.sessionsLastRoot, path);
     if (selectedId && !dashboard.sessions.some((session) => session.sessionId === selectedId && (path === '.' ? /^\/home\/[^/]+$/.test(session.cwd ?? '') : (session.cwd ?? '').replace(/\\/g, '/').endsWith('/' + path)))) selectedId = null;
     pickerOpen = false;
     formError = '';
+    await loadModels(path);
   }
 
   async function sendPrompt(event?: SubmitEvent) {
@@ -118,6 +150,7 @@
 
   onMount(() => {
     cwd = readString(storageKeys.sessionsLastRoot) ?? '';
+    if (cwd) void loadModels(cwd);
     void dashboard.refresh();
   });
   $effect(() => {
@@ -137,6 +170,14 @@
           {#if formError}<p class="mx-auto mb-2 mx-auto mb-2 w-full max-w-2xl text-left text-xs text-danger" role="alert">{formError}</p>{/if}
           <form onsubmit={(event) => { event.preventDefault(); if (activeSession) void sendPrompt(); else void createSession(); }} class="relative mx-auto w-full max-w-2xl rounded-2xl border border-line bg-surface-raised shadow-card focus-within:border-accent/50">
             <textarea bind:value={prompt} rows="1" placeholder={active ? "OMP is working…" : "Message OMP…"} disabled={sending || creating} oninput={(event) => { const el = event.currentTarget; el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 192) + "px"; }} class="max-h-48 min-h-0 w-full appearance-none resize-none overflow-y-auto rounded-none border-0 bg-transparent px-4 py-2 text-base leading-5 text-fg outline-none ring-0 focus:border-0 focus:outline-none focus:ring-0 placeholder:text-fg-faint disabled:opacity-60"></textarea>
+            {#if !activeSession}
+              <div class="flex flex-wrap items-center gap-2 border-t border-line/70 px-3 py-2">
+                <span class="shrink-0 text-[11px] text-fg-faint">Model</span>
+                <OptionDropdown options={sessionModelChoices} value={selectedModel} label="Session model" width="w-full" class="min-w-0 max-w-full flex-1" disabled={!cwd || modelsLoading || creating} onchange={(value) => (selectedModel = value)} />
+                {#if modelsLoading}<span class="text-[10px] text-fg-faint">Loading models…</span>{/if}
+                {#if modelsError}<span class="basis-full text-[10px] text-danger">{modelsError}</span>{/if}
+              </div>
+            {/if}
             <div class="flex items-center justify-between gap-3 px-3 pb-2"><div class="flex min-w-0 items-center gap-2">{#if !activeSession}<button type="button" onclick={openDirectoryPicker} class="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-line bg-surface text-fg-muted hover:bg-surface-hover" title="Choose project directory" aria-label="Choose project directory"><Plus size={17} /></button>{#if cwd}<button type="button" onclick={openDirectoryPicker} class="flex min-w-0 max-w-64 items-center gap-1.5 rounded-full border border-line bg-surface px-2.5 py-1 text-[11px] text-fg-muted hover:bg-surface-hover"><Folder size={12} /><span class="truncate">{cwd}</span><X size={11} /></button>{:else}<span class="text-[10px] text-fg-faint">Choose a project with +</span>{/if}{:else}<span class="truncate text-[10px] text-fg-faint">{activeSession.cwd}</span>{/if}</div>{#if active}<button type="button" onclick={interruptSession} class="inline-flex size-8 items-center justify-center rounded-full bg-accent text-white hover:opacity-90" aria-label="Stop" title="Stop"><Square size={14} /></button>{:else}<button type="submit" disabled={!prompt.trim() || sending || creating || (!activeSession && !cwd)} class="inline-flex size-8 items-center justify-center rounded-full bg-accent text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40" aria-label="Send message" title="Send message"><ArrowUp size={16} /></button>{/if}</div>
           </form>
         </div>

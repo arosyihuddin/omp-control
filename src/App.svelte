@@ -23,6 +23,7 @@
   import Sessions from './pages/Sessions.svelte';
   import OmpConfiguration from './pages/OmpConfiguration.svelte';
   import Approvals from './pages/Approvals.svelte';
+  import { isOmpConfigRoute } from '$lib/routes';
   import ToastViewport from '$lib/components/ui/ToastViewport.svelte';
 
 
@@ -138,18 +139,18 @@
 {/snippet}
 
 <AppShell
-    fill={router.current === 'terminal' || router.current === 'sessions' || router.current === 'omp-config' || router.current === 'workspace-files' || router.current === 'workspace-editor'}
+    fill={router.current === 'terminal' || router.current === 'sessions' || isOmpConfigRoute(router.current) || router.current === 'workspace-files' || router.current === 'workspace-editor'}
     {sidebar}
     {header}
   >
     {#if router.current === 'overview'}
       <Overview />
     {:else if router.current === 'tools'}
-    <Tools />
-  {:else if router.current === 'approvals'}
-    <Approvals />
-  {:else if router.current === 'omp-config'}
-    <OmpConfiguration />
+      <Tools />
+    {:else if router.current === 'approvals'}
+      <Approvals />
+    {:else if isOmpConfigRoute(router.current)}
+      <OmpConfiguration />
   {:else if router.current === 'sessions'}
     <Sessions />
   {:else if router.current === 'terminal'}
