@@ -9,7 +9,6 @@ import type {
   WorkspaceStat,
   ApprovalDecision,
   DashboardSnapshot,
-  Session,
   TerminalInfo,
   Tool,
   ToolCustomRule,
@@ -67,40 +66,6 @@ export const dashboardApi = {
   snapshot: () => request<DashboardSnapshot>('/api/dashboard'),
 };
 
-export interface OmpSetting {
-  id: string;
-  type: 'boolean' | 'number' | 'string' | 'enum' | 'array' | 'record';
-  label: string;
-  description: string;
-  tab: string;
-  group: string;
-  warning?: string;
-  condition?: string;
-  options?: Array<{ value: string; label: string; description?: string }>;
-  runtimeOptions?: boolean;
-  enumValues?: string[];
-  defaultValue: unknown;
-  value: unknown;
-  configured: boolean;
-  hasValue: boolean;
-  secret: boolean;
-  provenance: 'env' | 'runtime' | 'overlay' | 'project' | 'global' | 'default';
-  envName: string | null;
-  envFallback: boolean | 'blank';
-}
-
-export const ompConfigApi = {
-  list: () => request<{ configPath: string; settings: OmpSetting[] }>('/api/omp/config'),
-  update: async (id: string, value: unknown) =>
-    (await request<{ setting: OmpSetting }>('/api/omp/config', {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ id, value }),
-    })).setting,
-  reset: async (id: string) =>
-    (await postJson<{ setting: OmpSetting }>('/api/omp/config/reset', { id })).setting,
-};
-
 export const toolsApi = {
   list: async () => (await request<{ tools: Tool[] }>('/api/tools')).tools ?? [],
   setExposed: async (name: string, exposed: boolean) =>
@@ -121,26 +86,6 @@ export const approvalsApi = {
   list: async () => (await request<{ approvals: Approval[] }>('/api/approvals')).approvals ?? [],
   decide: (id: string, decision: ApprovalDecision) => postJson(`/api/approvals/${enc(id)}/${decision}`),
   clear: () => postJson('/api/approvals/clear'),
-};
-
-export interface OmpModelOption {
-  id: string;
-  name: string;
-  provider: string;
-  contextWindow?: number;
-}
-
-export const sessionsModelsApi = {
-  list: (cwd: string) => request<{ models: OmpModelOption[]; defaultModel: string | null }>(`/api/models?cwd=${enc(cwd)}`),
-};
-
-export const sessionsApi = {
-  create: (input: { task: string; cwd: string; model?: string }) =>
-    postJson<{ session: Session }>('/api/sessions', input).then((data) => data.session),
-  resume: (sessionId: string, task: string) =>
-    postJson<{ session: Session }>(`/api/sessions/${enc(sessionId)}/resume`, { task }).then((data) => data.session),
-  act: (sessionId: string, action: 'interrupt' | 'dispose') =>
-    postJson<Session | { session_id: string; disposed: boolean }>(`/api/sessions/${enc(sessionId)}/${action}`),
 };
 
 export const logsApi = {

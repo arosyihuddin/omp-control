@@ -1,19 +1,16 @@
 <script lang="ts">
   import { untrack } from 'svelte';
-  import { Panel, StatCard, StatusDot } from '$lib/components/ui';
+  import { StatCard, StatusDot } from '$lib/components/ui';
   import { dashboard } from '$lib/stores/dashboard.svelte';
-  import { router } from '$lib/stores/router.svelte';
   import OverviewSkeleton from '$features/overview/OverviewSkeleton.svelte';
   import RiskPanel from '$features/overview/RiskPanel.svelte';
   import RuntimePanel from '$features/overview/RuntimePanel.svelte';
   import StoragePanel from '$features/overview/StoragePanel.svelte';
   import SystemPanel from '$features/overview/SystemPanel.svelte';
-  import { SessionList } from '$features/sessions';
 
   type ResourceSample = { time: string; cpu: number | null; memoryGiB: number | null; gpu: number | null };
   const system = $derived(dashboard.host.system ?? {});
   const service = $derived(dashboard.host.service ?? {});
-  const running = $derived(dashboard.sessions.filter((session) => session.status === 'running').length);
   const memoryUsedGiB = $derived(system.memory?.used_bytes == null ? null : system.memory.used_bytes / 1024 ** 3);
   const memoryTotalGiB = $derived(system.memory?.total_bytes == null ? null : system.memory.total_bytes / 1024 ** 3);
   const gpu = $derived(system.gpu?.devices?.[0]);
@@ -43,7 +40,7 @@
         <div class="min-w-0">
           <p class="eyebrow">OPERATIONS CENTER</p>
           <h1 class="mt-1 text-2xl font-semibold tracking-tight text-fg sm:text-3xl">Overview</h1>
-          <p class="mt-2 max-w-2xl text-sm leading-6 text-fg-subtle">Ringkasan kondisi server, resource host, aktivitas agent, dan approval yang membutuhkan perhatian.</p>
+          <p class="mt-2 max-w-2xl text-sm leading-6 text-fg-subtle">Ringkasan kondisi server, resource host, dan approval yang membutuhkan perhatian.</p>
           <div class="mt-4 flex flex-wrap items-center gap-2 text-sm">
             <span class="inline-flex max-w-full items-center gap-2 rounded-md border border-line bg-surface px-2.5 py-1.5 text-fg-muted"><span class="h-1.5 w-1.5 shrink-0 rounded-full" class:bg-emerald-400={dashboard.connected} class:bg-fg-faint={!dashboard.connected}></span><span class="truncate">{system.os?.hostname ?? 'OMP-MCP server'}</span></span>
             <span class="text-fg-faint">{system.os?.pretty_name ?? system.os?.platform ?? 'Host telemetry'}</span>
@@ -62,7 +59,6 @@
     <section aria-label="Key metrics" class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <a href="/tools" class="group rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-accent"><StatCard label="Registered tools" value={dashboard.toolCount} hint="Available system capabilities" /></a>
       <a href="/approvals" class="group rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-accent"><StatCard label="Pending approvals" value={dashboard.pendingApprovals} hint={dashboard.pendingApprovals ? 'Action required · review requests' : 'No requests waiting'} /></a>
-      <a href="/sessions" class="group rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-accent"><StatCard label="Active agents" value={running} hint={`${dashboard.sessions.length} total sessions`} /></a>
       <StatCard label="Server status" hint="Remote telemetry connection">
         {#snippet valueSlot()}
           <span class="flex items-center gap-2 text-xl sm:text-2xl"><StatusDot tone={dashboard.connected ? 'success' : 'muted'} pulse={dashboard.connected} />{dashboard.connected ? 'Connected' : 'Offline'}</span>
@@ -124,11 +120,6 @@
       <RiskPanel counts={dashboard.toolRiskCounts} total={dashboard.toolCount} />
     </section>
 
-    <Panel title="Recent OMP sessions" description="Latest agent sessions and their current state.">
-      {#snippet actions()}
-        <a href="/sessions" class="rounded px-1.5 py-1 text-sm text-fg-subtle transition-colors hover:text-fg" onclick={(event) => router.link(event, 'sessions')}>View all <span aria-hidden="true">→</span></a>
-      {/snippet}
-      <SessionList sessions={dashboard.sessions} limit={5} emptyText="No OMP sessions are currently registered." />
-    </Panel>
+
   </div>
 {/if}

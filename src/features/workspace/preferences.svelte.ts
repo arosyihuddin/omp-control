@@ -25,6 +25,7 @@ class WorkspacePrefs {
   recents = $state<RecentEntry[]>([]);
   view = $state<FileView>('list');
   showHidden = $state(false);
+  showSidebar = $state(true);
   sortBy = $state<SortBy>('name');
   sortDir = $state<SortDir>('asc');
   loaded = $state(false);
@@ -51,13 +52,13 @@ class WorkspacePrefs {
     this.pins = state.pins;
     this.favorites = state.favorites;
     this.recents = state.recents;
-    const { view, showHidden, sortBy, sortDir } = state.prefs;
+    const { view, showHidden, showSidebar, sortBy, sortDir } = state.prefs;
     this.view = view === 'grid' ? 'grid' : 'list';
     this.showHidden = showHidden === 'true';
+    this.showSidebar = showSidebar !== 'false';
     this.sortBy = sortBy === 'size' || sortBy === 'modified' ? sortBy : 'name';
     this.sortDir = sortDir === 'desc' ? 'desc' : 'asc';
   }
-
   private async load() {
     try {
       let state = await workspaceStateApi.state();
@@ -152,6 +153,10 @@ class WorkspacePrefs {
   setShowHidden(value: boolean) {
     this.showHidden = value;
     this.save('showHidden', String(value));
+  }
+  setShowSidebar(value: boolean) {
+    this.showSidebar = value;
+    this.save('showSidebar', String(value));
   }
 
   setSort(by: SortBy, dir: SortDir = this.sortDir) {

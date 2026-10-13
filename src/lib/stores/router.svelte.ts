@@ -1,3 +1,4 @@
+import { goto } from '$app/navigation';
 import { isWorkspaceRoute, resolveRoute, routes, type RouteId } from '$lib/routes';
 
 class Router {
@@ -14,7 +15,6 @@ class Router {
   /** Start listening to browser history. Returns a cleanup function. */
   init() {
     this.current = resolveRoute(window.location.pathname);
-    history.replaceState({}, '', routes[this.current].path);
     const onPopState = () => (this.current = resolveRoute(window.location.pathname));
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
@@ -23,7 +23,7 @@ class Router {
   navigate(id: RouteId) {
     if (id === this.current) return;
     this.current = id;
-    history.pushState({}, '', routes[id].path);
+    void goto(routes[id].path);
   }
 
   /**

@@ -4,6 +4,7 @@ import { browser } from './browser.svelte';
 import { editor } from './editor.svelte';
 import { isPreviewable } from '$lib/utils/workspace';
 import { preview } from './preview.svelte';
+import { editorOpenPrompt } from './editor-prompt.svelte';
 
 /**
  * Operations a file row can offer. Every member except `open` is optional:
@@ -71,7 +72,7 @@ export function openPath(path: string, name: string, type: WorkspaceItem['type']
     router.navigate('workspace-files');
     preview.show(path, name);
   } else {
-    openInEditor(path, name);
+    editorOpenPrompt.current = { path, name };
   }
 }
 

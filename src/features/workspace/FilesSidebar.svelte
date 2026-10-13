@@ -1,13 +1,30 @@
 <script lang="ts">
-  import { Home, PinOff } from '@lucide/svelte';
-  import { IconButton } from '$lib/components/ui';
+  import { FilePlus, FolderPlus, Home, PinOff, Plus } from '@lucide/svelte';
+  import { IconButton, Menu, MenuItem } from '$lib/components/ui';
   import { browser } from './browser.svelte';
   import FileIcon from '$lib/components/workspace/FileIcon.svelte';
   import { prefs } from './preferences.svelte';
+
+  interface Props {
+    onnew: (type: 'file' | 'directory') => void;
+  }
+
+  let { onnew }: Props = $props();
 </script>
 
 <aside class="hidden min-h-0 overflow-y-auto border-r border-line pr-3 lg:block">
-  <div class="eyebrow mb-2 px-2">Places</div>
+  <div class="mb-2 flex h-7 items-center justify-between pl-2 pr-0">
+    <span class="eyebrow">Places</span>
+    <Menu width="w-44">
+      {#snippet trigger({ toggle, open })}
+        <IconButton size="sm" label="Create new file or folder" active={open} aria-expanded={open} onclick={toggle}><Plus size={13} /></IconButton>
+      {/snippet}
+      {#snippet children({ close })}
+        <MenuItem onclick={() => { close(); onnew('file'); }}><FilePlus size={13} /> New file</MenuItem>
+        <MenuItem onclick={() => { close(); onnew('directory'); }}><FolderPlus size={13} /> New folder</MenuItem>
+      {/snippet}
+    </Menu>
+  </div>
   <ul class="space-y-0.5">
     <li>
       <button

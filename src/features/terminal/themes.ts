@@ -4,10 +4,10 @@ import type { Theme } from '$lib/stores/theme.svelte';
 /** xterm palettes aligned with the Linear design tokens (see lib/styles/tokens.css). */
 export const xtermThemes: Record<Theme, ITheme> = {
   dark: {
-    background: '#141516',
+    background: '#171717',
     foreground: '#d0d6e0',
     cursor: '#f7f8f8',
-    cursorAccent: '#141516',
+    cursorAccent: '#171717',
     selectionBackground: '#5e6ad24d',
     black: '#1b1c1f',
     red: '#eb5757',
@@ -27,10 +27,10 @@ export const xtermThemes: Record<Theme, ITheme> = {
     brightWhite: '#f7f8f8',
   },
   light: {
-    background: '#fbfbfc',
+    background: '#ffffff',
     foreground: '#1b1c1f',
     cursor: '#1b1c1f',
-    cursorAccent: '#fbfbfc',
+    cursorAccent: '#ffffff',
     selectionBackground: '#5e6ad233',
     black: '#1b1c1f',
     red: '#d93f3f',

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ConfirmDialog, ContextMenu, MenuItem, Skeleton } from '$lib/components/ui';
-  import { Check, FilePlus, FolderPlus, Info, RefreshCw, SquareTerminal } from '@lucide/svelte';
+  import { Check, ChevronRight, FilePlus, FolderPlus, Info, RefreshCw, SquareTerminal } from '@lucide/svelte';
   import { workspaceApi } from '$lib/api';
   import type { WorkspaceItem } from '$lib/types';
   import { copyText, homePath, openInEditor, openPath, openProject, type FileActions, type RowInteractions } from './actions';
@@ -27,6 +27,8 @@
   let attempt = $state(0);
   let draft = $state('');
 
+  let sortSubmenuOpen = $state(false);
+  let sortSubmenuSide = $state<'left' | 'right'>('right');
   let menu = $state<{ x: number; y: number; item?: WorkspaceItem; path?: string } | null>(null);
 
   const sortLabels: Record<SortBy, string> = { name: 'Name', size: 'Size', modified: 'Modified' };
@@ -99,6 +101,8 @@
     oncontext(event, item, path) {
       event.preventDefault();
       event.stopPropagation();
+      sortSubmenuOpen = false;
+      sortSubmenuSide = event.clientX > window.innerWidth - 360 ? 'left' : 'right';
       menu = { x: event.clientX, y: event.clientY, item, path };
     },
   };
@@ -132,6 +136,8 @@
   function onBackgroundContext(event: MouseEvent) {
     if ((event.target as HTMLElement).closest('input, textarea')) return;
     event.preventDefault();
+    sortSubmenuOpen = false;
+    sortSubmenuSide = event.clientX > window.innerWidth - 360 ? 'left' : 'right';
     menu = { x: event.clientX, y: event.clientY };
   }
 
@@ -151,10 +157,15 @@
   }
 </script>
 
-<div class="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4 lg:grid-cols-[200px_1fr] lg:grid-rows-1">
-  <FilesSidebar />
+<div class={[
+  'grid h-full min-h-0 gap-4 lg:grid-rows-1',
+  prefs.showSidebar ? 'grid-rows-[auto_minmax(0,1fr)] lg:grid-cols-[200px_1fr]' : 'grid-rows-1 lg:grid-cols-1',
+]}>
+  {#if prefs.showSidebar}
+    <FilesSidebar onnew={startCreate} />
+  {/if}
   <div class="flex min-h-0 min-w-0 flex-col gap-3">
-    <FilesToolbar bind:search onnew={startCreate} />
+    <FilesToolbar bind:search />
     {#if browser.error || prefs.error}
       <p class="rounded-md border border-danger/25 bg-danger/5 px-3 py-2 text-sm text-danger" role="alert">{browser.error || prefs.error}</p>
     {/if}
@@ -188,17 +199,26 @@
         <div role="separator" class="my-1 h-px bg-line"></div>
         <MenuItem onclick={run(() => void browser.refresh())}><RefreshCw size={13} /> Refresh</MenuItem>
         <div role="separator" class="my-1 h-px bg-line"></div>
-        <div class="eyebrow px-2 py-1">Sort by</div>
-        {#each Object.entries(sortLabels) as [key, label] (key)}
-          <MenuItem class="justify-between" onclick={run(() => prefs.setSort(key as SortBy))}>
-            <span>{label}</span>
-            {#if prefs.sortBy === key}<Check size={13} class="text-accent-hover" />{/if}
+        <div role="presentation" class="relative" onpointerenter={(event) => { if (event.pointerType === 'mouse') sortSubmenuOpen = true; }} onpointerleave={(event) => { if (event.pointerType === 'mouse') sortSubmenuOpen = false; }}>
+          <MenuItem class="justify-between" aria-haspopup="menu" aria-expanded={sortSubmenuOpen} onclick={() => (sortSubmenuOpen = true)}>
+            <span>Sort by</span>
+            <ChevronRight size={13} />
           </MenuItem>
-        {/each}
-        <MenuItem class="justify-between" onclick={run(() => prefs.setSort(prefs.sortBy, prefs.sortDir === 'asc' ? 'desc' : 'asc'))}>
-          <span>{prefs.sortDir === 'asc' ? 'Ascending' : 'Descending'}</span>
-          <span class="text-xs text-fg-faint">toggle</span>
-        </MenuItem>
+          {#if sortSubmenuOpen}
+            <div role="menu" class={['absolute top-0 z-[80] min-w-40 rounded-lg border border-line-strong bg-surface-raised p-1 shadow-pop', sortSubmenuSide === 'right' ? 'left-full ml-0.5' : 'right-full mr-0.5']}>
+              {#each Object.entries(sortLabels) as [key, label] (key)}
+                <MenuItem class="justify-between" onclick={run(() => prefs.setSort(key as SortBy))}>
+                  <span>{label}</span>
+                  {#if prefs.sortBy === key}<Check size={13} class="text-accent-hover" />{/if}
+                </MenuItem>
+              {/each}
+              <div role="separator" class="my-1 h-px bg-line"></div>
+              <MenuItem class="justify-between" onclick={run(() => prefs.setSort(prefs.sortBy, prefs.sortDir === 'asc' ? 'desc' : 'asc'))}>
+                <span>{prefs.sortDir === 'asc' ? 'Ascending' : 'Descending'}</span>
+              </MenuItem>
+            </div>
+          {/if}
+        </div>
         <div role="separator" class="my-1 h-px bg-line"></div>
         <MenuItem class="justify-between" onclick={run(() => prefs.setView(prefs.view === 'list' ? 'grid' : 'list'))}>
           <span>View as {prefs.view === 'list' ? 'grid' : 'list'}</span>

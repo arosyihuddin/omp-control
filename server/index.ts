@@ -115,8 +115,6 @@ function runtimeRouteAllowed(path: string, method: string): boolean {
     "/api/tunnels": ["GET", "POST"],
     "/api/tunnels/status": ["GET"],
     "/api/tunnels/events": ["GET"],
-    "/api/omp/config": ["GET", "PUT"],
-    "/api/omp/config/reset": ["POST"],
     "/api/terminals": ["GET", "POST"],
     "/api/tools": ["GET"],
     "/api/logs": ["GET"],
@@ -149,8 +147,6 @@ function runtimeRouteAllowed(path: string, method: string): boolean {
   if (new RegExp("^/api/tools/sections/(read_only|edit_delete|other)/permission$").test(path)) return method === "PATCH";
   if (new RegExp("^/api/tools/[^/]+$").test(path)) return method === "PATCH";
   if (new RegExp("^/api/approvals/[^/]+/(approve|approve-session|deny)$").test(path)) return method === "POST";
-  if (path === "/api/sessions") return method === "POST";
-  if (new RegExp("^/api/sessions/[^/]+/(interrupt|dispose|resume)$").test(path)) return method === "POST";
   return false;
 }
 

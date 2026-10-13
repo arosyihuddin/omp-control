@@ -1,15 +1,14 @@
 <script lang="ts">
-  import { ArrowLeft, ArrowRight, Check, FilePlus, FolderPlus, Home, LayoutGrid, List, MoreVertical, Plus, type LucideIcon } from '@lucide/svelte';
-  import { Button, IconButton, Menu, MenuItem, SearchInput, SegmentedControl } from '$lib/components/ui';
+  import { ArrowLeft, ArrowRight, Check, Home, LayoutGrid, List, MoreVertical, PanelLeft, type LucideIcon } from '@lucide/svelte';
+  import { IconButton, Menu, MenuItem, SearchInput, SegmentedControl } from '$lib/components/ui';
   import { browser } from './browser.svelte';
   import { prefs, type FileView } from './preferences.svelte';
 
   interface Props {
     search?: string;
-    onnew: (type: 'file' | 'directory') => void;
   }
 
-  let { search = $bindable(''), onnew }: Props = $props();
+  let { search = $bindable('') }: Props = $props();
 
   const viewOptions: { value: FileView; icon: LucideIcon; iconClass: string; ariaLabel: string }[] = [
     { value: 'list', icon: List, iconClass: 'text-accent-hover', ariaLabel: 'List view' },
@@ -25,16 +24,17 @@
     <IconButton label="Forward" disabled={!browser.forward.length} onclick={() => browser.goForward()}><ArrowRight size={14} /></IconButton>
     <nav
       aria-label="Current folder"
-      class="flex h-8 min-w-0 flex-1 items-center gap-0.5 overflow-x-auto rounded-md border border-line bg-surface px-1 font-mono text-xs text-fg-muted"
+      class="flex h-8 min-w-0 flex-1 items-center gap-0.5 overflow-x-auto rounded-md border border-line bg-surface px-1 font-mono text-sm text-fg-muted"
     >
-      <button type="button" class="flex h-6 shrink-0 items-center gap-1 rounded px-1.5 hover:bg-surface-hover hover:text-fg" onclick={() => browser.navigate('.')}>
-        <Home size={12} /> /home
+      <button type="button" class="flex h-6 shrink-0 items-center gap-1 rounded px-1.5 leading-none hover:bg-surface-hover hover:text-fg" onclick={() => browser.navigate('.')}>
+        <Home size={12} class="block shrink-0" />
+        <span class="relative top-px inline-flex items-center leading-none">/home</span>
       </button>
       {#each segments as segment, index (index)}
         <span class="text-fg-faint">/</span>
         <button
           type="button"
-          class="h-6 shrink-0 rounded px-1.5 hover:bg-surface-hover hover:text-fg"
+          class="flex h-6 shrink-0 items-center rounded px-1.5 leading-none hover:bg-surface-hover hover:text-fg"
           onclick={() => browser.navigate(segments.slice(0, index + 1).join('/'))}
         >
           {segment}
@@ -44,18 +44,9 @@
   </div>
 
   <div class="flex items-center gap-2">
-    <Menu width="w-44">
-      {#snippet trigger({ toggle, open })}
-        <Button size="sm" aria-expanded={open} onclick={toggle}><Plus size={13} /> New</Button>
-      {/snippet}
-      {#snippet children({ close })}
-        <MenuItem onclick={() => { close(); onnew('file'); }}><FilePlus size={13} /> New file</MenuItem>
-        <MenuItem onclick={() => { close(); onnew('directory'); }}><FolderPlus size={13} /> New folder</MenuItem>
-      {/snippet}
-    </Menu>
     <SearchInput class="w-full sm:w-56" bind:value={search} placeholder="Search in folder" label="Search files" />
     <SegmentedControl label="File view" options={viewOptions} value={prefs.view} onchange={(view) => prefs.setView(view)} />
-    <Menu width="w-48">
+    <Menu width="w-52">
       {#snippet trigger({ toggle, open })}
         <IconButton label="View options" active={open} aria-expanded={open} onclick={toggle}><MoreVertical size={14} /></IconButton>
       {/snippet}
@@ -69,6 +60,16 @@
         >
           <span>Show hidden files</span>
           {#if prefs.showHidden}<Check size={13} class="text-accent-hover" />{/if}
+        </MenuItem>
+        <div role="separator" class="my-1 h-px bg-line"></div>
+        <MenuItem
+          onclick={() => {
+            prefs.setShowSidebar(!prefs.showSidebar);
+            close();
+          }}
+        >
+          <PanelLeft size={13} />
+          {prefs.showSidebar ? 'Hide sidebar' : 'Show sidebar'}
         </MenuItem>
       {/snippet}
     </Menu>

@@ -29,7 +29,7 @@
 
 <svelte:window onpointerdown={onPointerDown} onkeydown={onKeydown} />
 
-<div bind:this={root} class="relative">
+<div bind:this={root} class={['relative', open && 'z-40']}>
   {@render trigger({ open, toggle })}
   {#if open}
     <div

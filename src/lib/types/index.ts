@@ -18,34 +18,6 @@ export interface Tool {
   sectionCustomRule: ToolCustomRule;
 }
 
-interface SessionMessage {
-  id: string;
-  role: 'user' | 'assistant' | 'tool';
-  content: string;
-  createdAt: string;
-  toolName?: string;
-  toolCallId?: string;
-  arguments?: string;
-  result?: string;
-  status?: "running" | "completed" | "failed";
-  isError?: boolean;
-}
-
-export interface Session {
-  sessionId: string;
-  status: string;
-  model?: string;
-  task?: string;
-  cwd?: string;
-  createdAt?: string;
-  updatedAt?: string;
-  collab?: { webUrl?: string; viewUrl?: string; instanceId?: string };
-  result?: string;
-  error?: string;
-  output?: string[];
-  messages?: SessionMessage[];
-}
-
 type ApprovalStatus = 'pending' | 'approved' | 'denied' | 'expired' | 'cancelled';
 export type ApprovalDecision = 'approve' | 'approve-session' | 'deny';
 
@@ -132,7 +104,6 @@ export interface DashboardSnapshot {
   host?: HostTelemetry;
   toolCount?: number;
   toolRiskCounts?: Partial<Record<RiskLevel, number>>;
-  sessions?: Session[];
   approvalCount?: number;
 }
 

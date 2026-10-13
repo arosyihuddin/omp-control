@@ -20,11 +20,9 @@
   import EditorView from './features/workspace/EditorView.svelte';
   import TerminalPage from './pages/Terminal.svelte';
   import Tools from './pages/Tools.svelte';
-  import Sessions from './pages/Sessions.svelte';
-  import OmpConfiguration from './pages/OmpConfiguration.svelte';
   import Approvals from './pages/Approvals.svelte';
-  import { isOmpConfigRoute } from '$lib/routes';
   import ToastViewport from '$lib/components/ui/ToastViewport.svelte';
+  import WorkspaceOverlays from './features/workspace/WorkspaceOverlays.svelte';
 
 
   import AuthPage from './pages/AuthPage.svelte';
@@ -90,10 +88,10 @@
     };
   });
 
-  // Overview and Sessions consume live dashboard events; other pages avoid a background SSE stream.
+  // Overview consumes live dashboard events; other pages avoid a background SSE stream.
   $effect(() => {
     const activeInstance = instanceRegistry.active;
-    if (!authenticated || !activeInstance || (router.current !== 'overview' && router.current !== 'sessions')) return;
+    if (!authenticated || !activeInstance || router.current !== 'overview') return;
     const stop = dashboard.connect();
     stopDashboardEvents = stop;
     void dashboard.refresh();
@@ -139,7 +137,8 @@
 {/snippet}
 
 <AppShell
-    fill={router.current === 'terminal' || router.current === 'sessions' || isOmpConfigRoute(router.current) || router.current === 'workspace-files' || router.current === 'workspace-editor'}
+    fill={router.current === 'terminal' || router.current === 'workspace-files' || router.current === 'workspace-editor'}
+    compactFill={router.current === 'terminal'}
     {sidebar}
     {header}
   >
@@ -149,10 +148,6 @@
       <Tools />
     {:else if router.current === 'approvals'}
       <Approvals />
-    {:else if isOmpConfigRoute(router.current)}
-      <OmpConfiguration />
-  {:else if router.current === 'sessions'}
-    <Sessions />
   {:else if router.current === 'terminal'}
     <TerminalPage />
   {:else if router.current === 'logs'}
@@ -169,3 +164,4 @@
   </AppShell>
 {/if}
 <ToastViewport />
+<WorkspaceOverlays />
