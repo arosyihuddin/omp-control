@@ -106,8 +106,13 @@ export const terminalsApi = {
   socketUrl: (id: string) => (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + runtimeUrl('/api/terminal/socket?id=' + enc(id)),
 };
 
+export interface GitChangeFile { path: string; name: string; status: string; kind: 'modified' | 'added' | 'deleted' | 'untracked'; }
+export interface GitFileDiff { path: string; before: string; after: string; }
+
 export const workspaceApi = {
   list: (path: string) => request<{ path: string; items: WorkspaceItem[] }>(`/api/workspace?path=${enc(path)}`),
+  gitStatus: (path: string) => request<{ repo: string; files: GitChangeFile[] }>(`/api/workspace/git-status?path=${enc(path)}`),
+  gitDiff: (path: string) => request<GitFileDiff>(`/api/workspace/git-diff?path=${enc(path)}`),
   remove: (path: string) => request(`/api/workspace?path=${enc(path)}`, { method: 'DELETE' }),
   readFile: async (path: string) =>
     (await request<{ content?: string }>(`/api/workspace/file?path=${enc(path)}`)).content ?? '',

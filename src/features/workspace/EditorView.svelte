@@ -1,11 +1,13 @@
 <script lang="ts">
-  import { Code2, FilePlus2, FolderOpen, ChevronRight, RefreshCw, Save, X, Circle, File, PanelLeft, Check, AlertCircle, Home, Maximize2, Minimize2, Search, Command, FolderX, Terminal as TerminalIcon, Plus } from '@lucide/svelte';
+  import { Code2, FilePlus2, FolderOpen, ChevronRight, RefreshCw, Save, X, Circle, File, PanelLeft, Check, AlertCircle, Home, Maximize2, Minimize2, Search, Command, FolderX, Terminal as TerminalIcon, Plus, GitBranch } from '@lucide/svelte';
   import { Button, IconButton, Modal, EmptyState, ContextMenu, MenuItem } from '$lib/components/ui';
   import { basename, displayPath, joinPath, isHidden } from '$lib/utils/workspace';
   import EditorTreeItem from './EditorTreeItem.svelte';
   import PathPicker from '$lib/components/workspace/PathPicker.svelte';
   import CommandPalette from './CommandPalette.svelte';
+  import GlobalSearch from './GlobalSearch.svelte';
   import CodeEditor from './CodeEditor.svelte';
+  import DiffCodeLine from './DiffCodeLine.svelte';
   import { editor } from './editor.svelte';
   import { prefs } from './preferences.svelte';
   import { onMount } from 'svelte';
@@ -27,6 +29,177 @@
   let resizeStartWidth = 224;
   let showHidden = $state(true);
   let filter = $state('');
+  let sidebarTab = $state<'files' | 'changes'>('files');
+  let gitChanges = $state<{ path: string; name: string; status: string; kind: string }[]>([]);
+  let gitRepoPath = $state('');
+  let gitLoading = $state(false);
+  let gitError = $state('');
+  let diffTabs = $state<{ path: string; before: string; after: string }[]>([]);
+  let activeDiffPath = $state<string | null>(null);
+  let restoredDiffRoot = '';
+  let restoringDiffTabs = false;
+  const selectedDiff = $derived(activeDiffPath ? diffTabs.find((tab) => tab.path === activeDiffPath) ?? null : null);
+  let diffLoading = $state(false);
+  let globalSearchOpen = $state(false);
+  let editorContentSection = $state<HTMLElement>();
+  type DiffLine = { type: 'context' | 'added' | 'removed'; content: string; oldNumber: number | null; newNumber: number | null };
+  function makeUnifiedDiff(before: string, after: string): DiffLine[] {
+    const oldLines = before === '' ? [] : before.replace(/\n$/, '').split('\n');
+    const newLines = after === '' ? [] : after.replace(/\n$/, '').split('\n');
+    const n = oldLines.length;
+    const m = newLines.length;
+    const rows: DiffLine[] = [];
+    let oldNumber = 1;
+    let newNumber = 1;
+    const push = (type: DiffLine['type'], content: string) => {
+      rows.push({ type, content, oldNumber: type === 'added' ? null : oldNumber, newNumber: type === 'removed' ? null : newNumber });
+      if (type !== 'added') oldNumber++;
+      if (type !== 'removed') newNumber++;
+    };
+    if (n * m <= 1_000_000) {
+      const lcs = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
+      for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) {
+        lcs[i][j] = oldLines[i] === newLines[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+      }
+      let i = 0;
+      let j = 0;
+      while (i < n && j < m) {
+        if (oldLines[i] === newLines[j]) { push('context', oldLines[i]); i++; j++; }
+        else if (lcs[i + 1][j] >= lcs[i][j + 1]) { push('removed', oldLines[i++]); }
+        else { push('added', newLines[j++]); }
+      }
+      while (i < n) push('removed', oldLines[i++]);
+      while (j < m) push('added', newLines[j++]);
+      return rows;
+    }
+    let prefix = 0;
+    while (prefix < n && prefix < m && oldLines[prefix] === newLines[prefix]) prefix++;
+    let suffix = 0;
+    while (suffix < n - prefix && suffix < m - prefix && oldLines[n - 1 - suffix] === newLines[m - 1 - suffix]) suffix++;
+    for (let i = 0; i < prefix; i++) push('context', oldLines[i]);
+    for (let i = prefix; i < n - suffix; i++) push('removed', oldLines[i]);
+    for (let i = prefix; i < m - suffix; i++) push('added', newLines[i]);
+    for (let i = n - suffix; i < n; i++) push('context', oldLines[i]);
+    return rows;
+  }
+  const unifiedDiffLines = $derived(selectedDiff ? makeUnifiedDiff(selectedDiff.before, selectedDiff.after) : []);
+  async function refreshGitChanges() {
+    if (!editor.root) { gitChanges = []; gitRepoPath = ''; return; }
+    gitLoading = true;
+    gitError = '';
+    try {
+      const result = await (await import('$lib/api')).workspaceApi.gitStatus(editor.root);
+      gitChanges = result.files;
+      gitRepoPath = result.repo;
+    } catch (error) {
+      gitChanges = [];
+      gitRepoPath = '';
+      gitError = error instanceof Error ? error.message : 'Unable to read Git status';
+    } finally { gitLoading = false; }
+  }
+
+  async function openGitDiff(path: string) {
+    diffLoading = true;
+    gitError = '';
+    try {
+      const diff = await (await import('$lib/api')).workspaceApi.gitDiff(path);
+      const existing = diffTabs.findIndex((tab) => tab.path === path);
+      if (existing >= 0) diffTabs[existing] = diff;
+      else diffTabs = [...diffTabs, diff];
+      activeDiffPath = path;
+      sidebarTab = 'changes';
+      showTree = true;
+    } catch (error) {
+      gitError = error instanceof Error ? error.message : 'Unable to load diff';
+    } finally { diffLoading = false; }
+  }
+
+  async function restoreDiffSession(root: string) {
+    if (restoredDiffRoot === root) return;
+    restoredDiffRoot = root;
+    let session: { paths: string[]; activePath: string | null } | null = null;
+    let savedFileTabs: string[] = [];
+    try {
+      session = JSON.parse(localStorage.getItem('omp-editor-git-diffs:' + root) ?? 'null');
+      const fileSession = JSON.parse(localStorage.getItem('omp-editor-session:' + root) ?? 'null');
+      savedFileTabs = Array.isArray(fileSession?.tabs) ? fileSession.tabs : [];
+    } catch {
+      session = null;
+      savedFileTabs = [];
+    }
+    restoringDiffTabs = true;
+    diffTabs = [];
+    activeDiffPath = null;
+    if (session?.paths?.length) {
+      for (const path of session.paths) {
+        try {
+          const diff = await (await import('$lib/api')).workspaceApi.gitDiff(path);
+          diffTabs = [...diffTabs, diff];
+        } catch {
+          // A file may no longer be changed or may have been removed since the last session.
+        }
+      }
+      activeDiffPath = session.activePath && diffTabs.some((tab) => tab.path === session.activePath)
+        ? session.activePath
+        : null;
+      // Restore the editor surface that was active before refresh. If no Explorer
+      // file is open, fall back to the last available Git diff tab.
+      if (!activeDiffPath && savedFileTabs.length === 0 && editor.tabs.length === 0 && diffTabs.length > 0) {
+        activeDiffPath = diffTabs[diffTabs.length - 1].path;
+      }
+    }
+    if (activeDiffPath) {
+      sidebarTab = 'changes';
+      showTree = true;
+    } else if (editor.activeTab) {
+      sidebarTab = 'files';
+      showTree = true;
+    }
+    restoringDiffTabs = false;
+  }
+
+  $effect(() => {
+    const root = editor.root;
+    if (root) void restoreDiffSession(root);
+  });
+
+  $effect(() => {
+    const root = editor.root;
+    const paths = diffTabs.map((tab) => tab.path);
+    const activePath = activeDiffPath;
+    if (!root || restoringDiffTabs || restoredDiffRoot !== root) return;
+    try {
+      localStorage.setItem('omp-editor-git-diffs:' + root, JSON.stringify({ paths, activePath }));
+    } catch {
+      // Keep Git diff tabs usable if browser storage is unavailable.
+    }
+  });
+
+  function activateFileTab(path: string) {
+    activeDiffPath = null;
+    sidebarTab = 'files';
+    showTree = true;
+    editor.activePath = path;
+  }
+
+  function closeDiffTab(path: string) {
+    diffTabs = diffTabs.filter((tab) => tab.path !== path);
+    if (activeDiffPath === path) {
+      activeDiffPath = null;
+      if (editor.activeTab) {
+        sidebarTab = 'files';
+        showTree = true;
+      }
+    }
+  }
+
+  function closeAllDiffTabs() {
+    diffTabs = [];
+    activeDiffPath = null;
+  }
+
+  $effect(() => { const root = editor.root; if (root) void refreshGitChanges(); });
+
   let terminalOpen = $state(false);
   let terminalHeight = $state(320);
   let resizingTerminal = $state(false);
@@ -51,7 +224,7 @@
   }
 
   const visibleItems = $derived(editor.items
-    .filter((item) => (showHidden || !isHidden(item.name)) && item.name.toLowerCase().includes(filter.trim().toLowerCase()))
+    .filter((item) => showHidden || !isHidden(item.name))
     .toSorted((a, b) => a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'directory' ? -1 : 1));
   const activeLineCount = $derived((editor.activeTab?.content ?? '').split('\n').length);
 
@@ -95,6 +268,15 @@
     window.addEventListener('keydown', handleEscape, true);
     return () => window.removeEventListener('keydown', handleEscape, true);
   });
+  function toggleSidebar(tab: 'files' | 'changes') {
+    if (showTree && sidebarTab === tab) {
+      showTree = false;
+      return;
+    }
+    sidebarTab = tab;
+    showTree = true;
+    if (tab === 'changes') void refreshGitChanges();
+  }
   function startSidebarResize(event: PointerEvent) {
     if (!showTree || event.button !== 0) return;
     event.preventDefault();
@@ -127,7 +309,9 @@
 
   function resizeTerminal(event: PointerEvent) {
     if (!resizingTerminal) return;
-    terminalHeight = Math.min(Math.floor(window.innerHeight * 0.75), Math.max(176, terminalResizeStartHeight + terminalResizeStartY - event.clientY));
+    const availableHeight = (editorContentSection?.clientHeight ?? window.innerHeight) - 80;
+    const maxHeight = Math.max(176, Math.min(Math.floor(window.innerHeight * 0.75), availableHeight));
+    terminalHeight = Math.min(maxHeight, Math.max(176, terminalResizeStartHeight + terminalResizeStartY - event.clientY));
     requestAnimationFrame(() => terminalViewport?.refit());
   }
 
@@ -302,75 +486,123 @@
 
   </div>
   <div class={["flex min-h-0 flex-1", resizingSidebar ? "select-none cursor-col-resize" : ""]}>
-    {#if editor.root && showTree}
-      <aside class="flex shrink-0 flex-col border-r border-line bg-surface text-sm" style={"width: " + sidebarWidth + "px; min-width: 160px; max-width: min(520px, 70vw)"}>
-        <div class="flex h-10 items-center justify-between border-b border-line px-3">
-          <span class="min-w-0 truncate text-xs font-semibold uppercase tracking-wide text-fg-muted" title={editor.projectLabel}>{editor.root ? editor.projectLabel : 'Explorer'}</span>
-          <div class="flex items-center gap-0.5">
-            <IconButton label="Collapse explorer" size="sm" onclick={() => (showTree = false)}><PanelLeft size={14} /></IconButton>
-          </div>
-        </div>
-        {#if editor.root}
-          <div class="border-b border-line px-2 py-2">
-            <input bind:value={filter} aria-label="Filter files" placeholder="Filter files…" class="h-8 w-full rounded-md border border-line bg-surface-raised px-2 text-sm text-fg placeholder:text-fg-faint outline-none focus:border-accent" />
-          </div>
-          <div class="min-h-0 flex-1 overflow-y-auto p-1.5">
-            {#if editor.treeLoading}
-              <p class="px-2 py-3 text-xs text-fg-faint">Loading files…</p>
-            {:else if visibleItems.length === 0}
-              <p class="px-2 py-3 text-xs text-fg-faint">{filter ? 'No matching files' : 'This folder is empty'}</p>
+    {#if editor.root}
+      <nav aria-label="Editor activity bar" class="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-line bg-surface py-2">
+        <IconButton label="Files" size="md" active={showTree && sidebarTab === 'files'} onclick={() => toggleSidebar('files')}><FolderOpen size={18} /></IconButton>
+        <IconButton label="Git Changes" size="md" active={showTree && sidebarTab === 'changes'} onclick={() => toggleSidebar('changes')}><GitBranch size={18} /></IconButton>
+        <IconButton label="Search in files" size="md" active={globalSearchOpen} onclick={() => (globalSearchOpen = true)}><Search size={18} /></IconButton>
+      </nav>
+      {#if showTree}
+        <aside class="flex shrink-0 flex-col border-r border-line bg-surface text-sm" style={"width: " + sidebarWidth + "px; min-width: 160px; max-width: min(520px, 70vw)"}>
+          <div class="flex h-10 shrink-0 items-center justify-between border-b border-line px-3">
+            <span class="min-w-0 truncate text-xs font-semibold uppercase tracking-wide text-fg-muted">{sidebarTab === 'files' ? 'Explorer' : 'Changes'}</span>
+            {#if sidebarTab === 'changes'}
+              <div class="flex items-center gap-0.5">
+                <span class="rounded bg-surface-raised px-1.5 py-0.5 text-[10px] tabular-nums text-fg-muted">{gitChanges.length}</span>
+                <IconButton label="Refresh changes" size="sm" onclick={() => void refreshGitChanges()}><RefreshCw size={13} /></IconButton>
+              </div>
             {:else}
-              {#each visibleItems as item (item.name)}
-                <EditorTreeItem
-                  {item}
-                  path={joinPath(editor.dir, item.name)}
-                  depth={0}
-                  activePath={editor.activePath}
-                  onOpen={(path, permanent) => void editor.openFile(path, undefined, !permanent)}
-                />
-              {/each}
+              <IconButton label="Collapse sidebar" size="sm" onclick={() => (showTree = false)}><PanelLeft size={14} /></IconButton>
             {/if}
           </div>
-        {:else}
-          <div class="flex flex-1 flex-col items-center justify-center gap-3 p-4 text-center">
-            <FolderOpen size={25} class="text-fg-faint" />
-            <p class="text-xs text-fg-subtle">No folder opened</p>
-            <Button size="sm" variant="secondary" onclick={() => openPicker('directory')}>Open Folder</Button>
-          </div>
-        {/if}
-      </aside>
-      <div role="separator" aria-orientation="vertical" aria-label="Resize explorer sidebar" title="Drag to resize sidebar (double-click to reset)" class="group relative z-10 -ml-px w-1 shrink-0 cursor-col-resize touch-none bg-transparent hover:bg-accent/50 active:bg-accent/70" onpointerdown={startSidebarResize} ondblclick={() => (sidebarWidth = 224)}><span class="absolute inset-y-0 -left-1 -right-1"></span></div>
-    {:else if editor.root}
-      <div class="flex items-start border-r border-line p-1.5">
-        <IconButton label="Show explorer" size="sm" onclick={() => (showTree = true)}><PanelLeft size={15} /></IconButton>
-      </div>
+          {#if sidebarTab === 'files'}
+            <div class="min-h-0 flex-1 overflow-y-auto p-1.5">
+              {#if editor.treeLoading}
+                <p class="px-2 py-3 text-xs text-fg-faint">Loading files…</p>
+              {:else if visibleItems.length === 0}
+                <p class="px-2 py-3 text-xs text-fg-faint">{filter ? 'No matching files' : 'This folder is empty'}</p>
+              {:else}
+                {#each visibleItems as item (item.name)}
+                  <EditorTreeItem
+                    {item}
+                    path={joinPath(editor.dir, item.name)}
+                    depth={0}
+                    activePath={editor.activePath}
+                    onOpen={(path, permanent) => { activeDiffPath = null; void editor.openFile(path, undefined, !permanent); }}
+                  />
+                {/each}
+              {/if}
+            </div>
+          {:else}
+            <div class="min-h-0 flex-1 overflow-y-auto p-1.5">
+              {#if gitLoading}
+                <p class="px-2 py-3 text-xs text-fg-faint">Loading Git changes…</p>
+              {:else if gitError}
+                <p class="px-2 py-3 text-xs text-danger">{gitError}</p>
+              {:else if gitChanges.length === 0}
+                <p class="px-2 py-3 text-xs text-fg-faint">No uncommitted changes</p>
+              {:else}
+                {#if gitRepoPath}<p class="truncate px-2 pb-2 text-[10px] text-fg-faint" title={gitRepoPath}>Repository: {gitRepoPath}</p>{/if}
+                {#each gitChanges as change (change.path)}
+                  <button type="button" class={['flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-surface-hover', selectedDiff?.path === change.path ? 'bg-surface-hover text-fg' : 'text-fg-muted']} title={change.path} onclick={() => void openGitDiff(change.path)}>
+                    <File size={14} class="shrink-0 text-fg-faint" />
+                    <span class="min-w-0 flex-1 truncate">{basename(change.path)}</span>
+                    <span class={['shrink-0 font-mono font-semibold', change.kind === 'added' || change.kind === 'untracked' ? 'text-success' : change.kind === 'deleted' ? 'text-danger' : 'text-warning']}>{change.status.trim() || 'M'}</span>
+                  </button>
+                {/each}
+              {/if}
+            </div>
+          {/if}
+        </aside>
+        <div role="separator" aria-orientation="vertical" aria-label="Resize explorer sidebar" title="Drag to resize sidebar (double-click to reset)" class="group relative z-10 -ml-px w-1 shrink-0 cursor-col-resize touch-none bg-transparent hover:bg-accent/50 active:bg-accent/70" onpointerdown={startSidebarResize} ondblclick={() => (sidebarWidth = 224)}><span class="absolute inset-y-0 -left-1 -right-1"></span></div>
+      {/if}
     {/if}
 
-    <section class="relative flex min-w-0 flex-1 flex-col">
+    <section bind:this={editorContentSection} class="relative flex min-w-0 flex-1 flex-col overflow-hidden">
       <section class={['absolute inset-x-0 bottom-0 z-20 flex-col overflow-hidden border-t border-line bg-surface-raised shadow-card', terminalOpen ? 'flex' : 'hidden']} style={terminalOpen ? `height: ${terminalHeight}px` : undefined}>
         <div role="separator" aria-orientation="horizontal" aria-label="Resize terminal panel" title="Drag to resize terminal" class="group relative z-10 h-1 shrink-0 cursor-row-resize touch-none bg-transparent hover:bg-accent/40 active:bg-accent/60" onpointerdown={startTerminalResize}><span class="absolute inset-x-0 -top-1 -bottom-1"></span></div>
         <header class="flex h-9 shrink-0 items-center justify-between border-b border-line px-2.5"><div class="flex items-center gap-2 text-xs font-medium text-fg-muted"><TerminalIcon size={14} /> Terminal <span class="text-fg-faint">({terminalController.terminals.length})</span></div><div class="flex items-center gap-1"><IconButton label="New terminal" size="sm" disabled={terminalController.creating} onclick={() => void terminalController.create()}><Plus size={14} /></IconButton><IconButton label="Hide terminal" size="sm" onclick={() => (terminalOpen = false)}><X size={14} /></IconButton></div></header>
         <div class="flex min-h-0 flex-1"><div class="relative min-w-0 flex-1"><TerminalViewport bind:this={terminalViewport} ondata={terminalController.sendInput} onresize={terminalController.sendResize} />{#if !terminalController.active && !terminalController.loading}<div class="absolute inset-0 flex items-center justify-center bg-surface text-sm text-fg-subtle">No active terminal</div>{/if}{#if terminalController.error}<button type="button" class="absolute inset-x-3 bottom-3 rounded-md border border-line bg-surface-raised px-3 py-2 text-left text-xs text-danger shadow-card" onclick={() => (terminalController.error = '')}>{terminalController.error}</button>{/if}</div><TerminalSessions terminals={terminalController.terminals} activeId={terminalController.activeId} loading={terminalController.loading} onopen={(id) => terminalController.open(id)} onclose={(id) => void closeTerminal(id)} /></div>
       </section>
-      {#if editor.tabs.length > 0}
+      {#if editor.tabs.length > 0 || diffTabs.length > 0}
         <div class="flex h-10 min-w-0 items-stretch overflow-x-auto border-b border-line bg-surface">
           {#each editor.tabs as tab (tab.path)}
-            <div class={['group flex min-w-0 max-w-52 shrink-0 items-center border-r border-line', editor.activePath === tab.path ? 'border-b-2 border-b-accent bg-surface-raised' : 'border-b-2 border-b-transparent']} role="group" oncontextmenu={(event) => openTabMenu(event, tab.path)}>
-              <button class={['flex min-w-0 flex-1 items-center gap-2 px-3 py-1.5 text-sm', editor.activePath === tab.path ? 'text-fg' : 'text-fg-muted hover:text-fg']} title={tab.path} onclick={() => (editor.activePath = tab.path)} onauxclick={(event) => { if (event.button === 1) { event.preventDefault(); closeRequest(tab.path); } }} ondblclick={() => editor.makePermanent(tab.path)}>
+            <div class={['group flex min-w-0 max-w-52 shrink-0 items-center border-r border-line', !activeDiffPath && editor.activePath === tab.path ? 'border-b-2 border-b-accent bg-surface-raised' : 'border-b-2 border-b-transparent']} role="group" oncontextmenu={(event) => openTabMenu(event, tab.path)}>
+              <button class={['flex min-w-0 flex-1 items-center gap-2 px-3 py-1.5 text-sm', !activeDiffPath && editor.activePath === tab.path ? 'text-fg' : 'text-fg-muted hover:text-fg']} title={tab.path} onclick={() => activateFileTab(tab.path)} onauxclick={(event) => { if (event.button === 1) { event.preventDefault(); closeRequest(tab.path); } }} ondblclick={() => editor.makePermanent(tab.path)}>
                 <File size={14} class="shrink-0 text-fg-subtle" />
                 <span class="truncate" class:italic={tab.preview}>{tab.name}</span>
-                {#if tab.content !== tab.saved}
-                  <Circle size={7} fill="currentColor" class="shrink-0 text-accent" />
-                {/if}
+                {#if tab.content !== tab.saved}<Circle size={7} fill="currentColor" class="shrink-0 text-accent" />{/if}
               </button>
               <button class="mr-1 flex size-6 shrink-0 items-center justify-center rounded text-fg-faint opacity-0 hover:bg-surface-hover hover:text-fg group-hover:opacity-100 focus:opacity-100" aria-label={'Close ' + tab.name} title="Close tab" onclick={() => closeRequest(tab.path)}><X size={13} /></button>
             </div>
           {/each}
-          <div class="flex flex-1 items-center justify-end gap-1 px-2">
-            <IconButton label="Close saved tabs" size="sm" onclick={() => editor.closeSaved()}><Check size={14} /></IconButton>
-            <IconButton label="Close all tabs" size="sm" onclick={() => void requestBulkClose('all')}><X size={14} /></IconButton>
-          </div>
+          {#each diffTabs as tab (tab.path)}
+            <div class={['group flex min-w-0 max-w-52 shrink-0 items-center border-r border-line', activeDiffPath === tab.path ? 'border-b-2 border-b-accent bg-surface-raised' : 'border-b-2 border-b-transparent']} role="group">
+              <button class={['flex min-w-0 flex-1 items-center gap-2 px-3 py-1.5 text-sm', activeDiffPath === tab.path ? 'text-fg' : 'text-fg-muted hover:text-fg']} title={tab.path} onclick={() => { activeDiffPath = tab.path; sidebarTab = 'changes'; showTree = true; }}>
+                <GitBranch size={14} class="shrink-0 text-fg-subtle" />
+                <span class="truncate">{basename(tab.path)}</span>
+              </button>
+              <button class="mr-1 flex size-6 shrink-0 items-center justify-center rounded text-fg-faint opacity-0 hover:bg-surface-hover hover:text-fg group-hover:opacity-100 focus:opacity-100" aria-label={'Close diff ' + tab.path} title="Close tab" onclick={() => closeDiffTab(tab.path)}><X size={13} /></button>
+            </div>
+          {/each}
         </div>
+      {/if}
+      {#if selectedDiff}
+        <div class="flex items-center gap-1 overflow-x-auto border-b border-line px-3 py-2 text-xs text-fg-faint">
+          <Home size={13} class="shrink-0" />
+          {#each selectedDiff.path.split('/').filter(Boolean) as crumb, index (index)}
+            <ChevronRight size={12} class="shrink-0" />
+            <span class={index === selectedDiff.path.split('/').filter(Boolean).length - 1 ? 'truncate text-fg-muted' : 'shrink-0'}>{crumb}</span>
+          {/each}
+        </div>
+        {#if diffLoading}
+          <div class="p-4 text-sm text-fg-subtle">Loading diff…</div>
+        {:else}
+          <div class="min-h-0 flex-1 overflow-auto bg-surface-raised font-mono text-xs leading-5">
+            {#if unifiedDiffLines.length === 0}
+              <div class="p-4 text-fg-faint">No textual changes</div>
+            {:else}
+              {#each unifiedDiffLines as line, index (`${selectedDiff.path}:${index}:${line.type}:${line.oldNumber}:${line.newNumber}`)}
+                <div class={['flex min-w-max border-l-2', line.type === 'added' ? 'border-success bg-success/10 text-fg' : line.type === 'removed' ? 'border-danger bg-danger/10 text-fg' : 'border-transparent text-fg-muted']}>
+                  <span class="sticky left-0 w-12 shrink-0 select-none border-r border-line/70 bg-surface px-2 text-right text-fg-faint">{line.newNumber ?? line.oldNumber ?? ''}</span>
+                  <span class={['w-7 shrink-0 select-none text-center font-semibold', line.type === 'added' ? 'text-success' : line.type === 'removed' ? 'text-danger' : 'text-fg-faint']}>{line.type === 'added' ? '+' : line.type === 'removed' ? '−' : ' '}</span>
+                  <DiffCodeLine content={line.content} filename={selectedDiff.path} />
+                </div>
+              {/each}
+            {/if}
+          </div>
+        {/if}
+      {:else if editor.tabs.length > 0}
         <div class="flex min-h-0 flex-1 flex-col">
           {#if editor.error}
             <div class="flex items-center gap-2 border-b border-danger/25 bg-danger/5 px-3 py-2 text-sm text-danger" role="alert"><AlertCircle size={15} />{editor.error}</div>
@@ -427,6 +659,7 @@
 </div>
 
 <CommandPalette open={commandOpen} root={editor.root || '.'} onclose={() => (commandOpen = false)} onselectfile={(path) => { commandOpen = false; void editor.openFile(path); }} onaction={(action) => { commandOpen = false; if (action === 'open-file') openPicker('file'); else if (action === 'open-folder') openPicker('directory'); else if (action === 'save') void editor.save(); else if (action === 'save-all') void editor.saveAll(); else if (action === 'toggle-explorer') showTree = !showTree; else if (action === 'fullscreen') toggleFullscreen(); else if (action === 'refresh') void editor.loadDir(editor.dir); else if (action === 'toggle-terminal') { if (terminalOpen) terminalOpen = false; else void showTerminal(); } else if (action === 'new-terminal') { void showTerminal(true); } }} />
+<GlobalSearch open={globalSearchOpen} root={editor.root || '.'} onclose={() => (globalSearchOpen = false)} onselect={(path) => { globalSearchOpen = false; void editor.openFile(path); }} />
 <PathPicker open={pickerOpen} mode={pickerMode} initialPath={editor.root || '.'} onselect={pickPath} oncancel={() => (pickerOpen = false)} />
 
 <Modal open={closeProjectOpen} title="Close project?" width="max-w-md" onclose={() => (closeProjectOpen = false)}>

@@ -229,6 +229,8 @@ const exact: Record<string, string[]> = {
   "/api/workspace/recents": ["POST", "DELETE"],
   "/api/workspace/prefs": ["PUT"],
   "/api/workspace/editor-session": ["GET", "PUT"],
+  "/api/workspace/git-status": ["GET"],
+  "/api/workspace/git-diff": ["GET"],
   "/api/workspace/file": ["GET", "PUT"],
   "/api/workspace/preview": ["GET"],
   "/api/workspace/download": ["GET"],
