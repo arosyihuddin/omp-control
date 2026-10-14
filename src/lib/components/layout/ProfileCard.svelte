@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ArrowLeftRight, LogOut, Settings } from '@lucide/svelte';
+  import { ArrowLeftRight, LogOut, Server, Settings } from '@lucide/svelte';
   import { Avatar, Menu, MenuItem } from '$lib/components/ui';
   import { dashboard } from '$lib/stores/dashboard.svelte';
   import { profile } from '$lib/stores/profile.svelte';
@@ -57,19 +57,14 @@
           <div class="truncate text-xs text-fg-subtle">{profile.data?.role ?? 'User'}</div>
         </div>
       </div>
-      <div class="mt-3 rounded-md bg-surface px-2.5 py-2">
-        <div class="mb-1 text-[10px] font-medium uppercase tracking-wide text-fg-faint">Active instance</div>
-        <div class="truncate text-xs font-medium text-fg" title={instanceRegistry.active?.name ?? 'No instance selected'}>{instanceName}</div>
-        <div class="mt-1 flex items-center gap-1.5 text-xs text-fg-subtle">
-          <span class={['size-1.5 rounded-full', dashboard.connected ? 'bg-success' : 'bg-fg-faint']}></span>
-          {status}
-          {#if instanceRegistry.active?.baseUrl}<span class="truncate text-fg-faint">· {instanceRegistry.active.baseUrl}</span>{/if}
-        </div>
-      </div>
+      <button type="button" class="mt-3 flex w-full items-center gap-2.5 rounded-md border border-line px-2.5 py-2 text-left text-sm text-fg-muted transition-colors hover:border-line-strong hover:bg-surface-hover hover:text-fg" title="Switch instance" onclick={() => { close(); window.dispatchEvent(new CustomEvent('omp-control:show-instance-picker')); }}>
+        <Server size={14} class={dashboard.connected ? "shrink-0 text-success" : "shrink-0 text-danger"} />
+        <span class="min-w-0 flex-1 truncate">{instanceName}</span>
+        <ArrowLeftRight size={14} class="shrink-0 text-fg-subtle" />
+      </button>
     </div>
-    <MenuItem onclick={() => { close(); window.dispatchEvent(new CustomEvent('omp-control:show-instance-picker')); }}><ArrowLeftRight size={13} /> Switch instance</MenuItem>
     <MenuItem onclick={() => { close(); settingsOpen = true; }}><Settings size={13} /> Settings</MenuItem>
-    <MenuItem onclick={() => { close(); window.dispatchEvent(new CustomEvent('omp-control:logout')); }}><LogOut size={13} /> Logout</MenuItem>
+    <MenuItem tone="danger" onclick={() => { close(); window.dispatchEvent(new CustomEvent('omp-control:logout')); }}><LogOut size={13} /> Logout</MenuItem>
   {/snippet}
 </Menu>
 
