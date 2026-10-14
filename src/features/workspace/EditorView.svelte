@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Code2, FilePlus2, FolderOpen, ChevronRight, RefreshCw, Save, X, Circle, File, PanelLeft, Check, AlertCircle, Home, Maximize2, Minimize2, Search, Command, FolderX, Terminal as TerminalIcon, Plus, GitBranch } from '@lucide/svelte';
+  import { Code2, FilePlus2, FolderOpen, ChevronRight, ChevronDown, RefreshCw, Save, X, Circle, File, PanelLeft, Check, AlertCircle, Home, Maximize2, Minimize2, Search, Command, FolderX, Terminal as TerminalIcon, Plus, GitBranch } from '@lucide/svelte';
   import { Button, IconButton, Modal, EmptyState, ContextMenu, MenuItem } from '$lib/components/ui';
   import { basename, displayPath, joinPath, isHidden } from '$lib/utils/workspace';
   import EditorTreeItem from './EditorTreeItem.svelte';
@@ -21,6 +21,9 @@
   let bulkCloseMode = $state<'others' | 'all' | null>(null);
   let bulkCloseKeepPath = $state<string | null>(null);
   let closeProjectOpen = $state(false);
+  let projectMenuOpen = $state(false);
+  let projectSwitchOpen = $state(false);
+  let pendingProject = $state<{ path: string; name: string } | null>(null);
   let showTree = $state(true);
   let fullscreen = $state(false);
   let sidebarWidth = $state(224);
@@ -38,6 +41,7 @@
   let activeDiffPath = $state<string | null>(null);
   let restoredDiffRoot = '';
   let restoringDiffTabs = false;
+  let diffRestoreRequestId = 0;
   const selectedDiff = $derived(activeDiffPath ? diffTabs.find((tab) => tab.path === activeDiffPath) ?? null : null);
   let diffLoading = $state(false);
   let globalSearchOpen = $state(false);
@@ -116,6 +120,7 @@
 
   async function restoreDiffSession(root: string) {
     if (restoredDiffRoot === root) return;
+    const restoreId = ++diffRestoreRequestId;
     restoredDiffRoot = root;
     let session: { paths: string[]; activePath: string | null } | null = null;
     let savedFileTabs: string[] = [];
@@ -134,6 +139,7 @@
       for (const path of session.paths) {
         try {
           const diff = await (await import('$lib/api')).workspaceApi.gitDiff(path);
+          if (restoreId !== diffRestoreRequestId || editor.root !== root) return;
           diffTabs = [...diffTabs, diff];
         } catch {
           // A file may no longer be changed or may have been removed since the last session.
@@ -148,6 +154,7 @@
         activeDiffPath = diffTabs[diffTabs.length - 1].path;
       }
     }
+    if (restoreId !== diffRestoreRequestId || editor.root !== root) return;
     if (activeDiffPath) {
       sidebarTab = 'changes';
       showTree = true;
@@ -337,8 +344,60 @@
 
   async function pickPath(path: string) {
     pickerOpen = false;
-    if (pickerMode === 'directory') await editor.openFolder(path, path === '.' ? 'Home' : basename(path));
-    else await editor.openFile(path);
+    if (pickerMode === 'directory') {
+      await requestSwitchProject(path, path === '.' ? 'Home' : basename(path));
+    } else await editor.openFile(path);
+  }
+
+  async function requestSwitchProject(path: string, name = path === '.' ? 'Home' : basename(path)) {
+    projectMenuOpen = false;
+    if (path === editor.root) return;
+    if (editor.dirty) {
+      pendingProject = { path, name };
+      projectSwitchOpen = true;
+      return;
+    }
+    const opening = editor.openFolder(path, name);
+    filter = '';
+    showTree = true;
+    sidebarTab = 'files';
+    activeDiffPath = null;
+    terminalOpen = false;
+    await opening;
+  }
+
+  async function confirmSwitchProject(choice: 'save' | 'discard' | 'cancel') {
+    const target = pendingProject;
+    projectSwitchOpen = false;
+    pendingProject = null;
+    if (!target || choice === 'cancel') return;
+    if (choice === 'save') {
+      await editor.saveAll();
+      if (editor.dirty) return;
+    }
+    const opening = editor.openFolder(target.path, target.name);
+    filter = '';
+    showTree = true;
+    sidebarTab = 'files';
+    activeDiffPath = null;
+    terminalOpen = false;
+    await opening;
+  }
+
+  function finishCloseProject() {
+    diffRestoreRequestId++;
+    restoringDiffTabs = false;
+    editor.closeProject();
+    filter = '';
+    showTree = true;
+    sidebarTab = 'files';
+    diffTabs = [];
+    activeDiffPath = null;
+    restoredDiffRoot = '';
+    gitChanges = [];
+    gitRepoPath = '';
+    gitError = '';
+    terminalOpen = false;
   }
 
   function requestCloseProject() {
@@ -346,9 +405,7 @@
       closeProjectOpen = true;
       return;
     }
-    editor.closeProject();
-    filter = '';
-    showTree = true;
+    finishCloseProject();
   }
 
   async function confirmCloseProject(choice: 'save' | 'discard' | 'cancel') {
@@ -358,9 +415,7 @@
       await editor.saveAll();
       if (editor.dirty) return;
     }
-    editor.closeProject();
-    filter = '';
-    showTree = true;
+    finishCloseProject();
   }
 
   function closeRequest(path: string) {
@@ -459,31 +514,55 @@
 
 <div class={["flex h-full min-h-0 flex-col overflow-hidden bg-surface-raised", fullscreen ? "fixed inset-0 z-50 rounded-none" : "rounded-lg border border-line shadow-card"]}>
   <div class="relative flex h-10 shrink-0 items-center justify-between gap-2 border-b border-line px-2.5">
-    <div class="flex min-w-0 flex-1 items-center gap-2">
-      <div class="flex size-7 shrink-0 items-center justify-center rounded text-accent"><Code2 size={16} /></div>
-      <span class="shrink-0 text-sm font-medium text-fg">Editor</span>
-      <span class="text-fg-faint">/</span>
-      <span class="truncate text-xs text-fg-subtle" title={editor.root ? displayPath(editor.root) : 'Open a folder or file to get started'}>{editor.root ? displayPath(editor.root) : 'No folder opened'}</span>
-    </div>
-    <button type="button" aria-label="Search files" title="Search files" onclick={() => (commandOpen = true)} class="absolute left-1/2 top-1/2 hidden h-7 w-[min(34%,360px)] -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-md border border-line bg-surface px-2.5 text-left text-xs text-fg-subtle transition-colors hover:border-fg-faint hover:bg-surface-hover sm:flex">
-      <Search size={14} class="shrink-0 text-fg-faint" />
-      <span class="flex-1 truncate">Search files…</span>
-      <span class="flex items-center gap-0.5 text-[10px] text-fg-faint"><Command size={10} /> P</span>
-    </button>
-    <div class="flex shrink-0 items-center gap-0.5">
+    <div class="flex min-w-0 flex-1 items-center gap-1.5">
+      <div class="relative min-w-0 shrink-0">
+        <button type="button" aria-haspopup="menu" aria-expanded={projectMenuOpen} class="flex h-8 max-w-[min(42vw,240px)] items-center gap-2 rounded-md px-2 text-left text-sm font-medium text-fg transition-colors hover:bg-surface-hover" onclick={() => (projectMenuOpen = !projectMenuOpen)}>
+          <Code2 size={16} class="shrink-0 text-accent" />
+          <span class="truncate">{editor.projectLabel || 'Open a project'}</span>
+          <ChevronDown size={14} class={['shrink-0 text-fg-subtle transition-transform', projectMenuOpen && 'rotate-180']} />
+        </button>
+        {#if projectMenuOpen}
+          <button type="button" class="fixed inset-0 z-30 cursor-default" aria-label="Close project menu" onclick={() => (projectMenuOpen = false)}></button>
+          <div role="menu" class="absolute left-0 top-full z-40 mt-1 w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-line bg-surface-raised p-1.5 shadow-pop">
+            <p class="px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-fg-faint">Projects</p>
+            {#if prefs.recents.length}
+              <div class="max-h-64 overflow-y-auto">
+                {#each prefs.recents as project (project.path)}
+                  <button type="button" role="menuitem" class="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left hover:bg-surface-hover" onclick={() => void requestSwitchProject(project.path, project.name)}>
+                    <FolderOpen size={15} class="shrink-0 text-fg-subtle" />
+                    <span class="min-w-0 flex-1"><span class="block truncate text-sm text-fg">{project.name}</span><span class="block truncate text-[10px] text-fg-faint" title={displayPath(project.path)}>{displayPath(project.path)}</span></span>
+                    {#if editor.root === project.path}<Check size={14} class="shrink-0 text-accent" />{/if}
+                  </button>
+                {/each}
+              </div>
+            {:else}
+              <p class="px-2.5 py-3 text-xs text-fg-subtle">No recent projects yet.</p>
+            {/if}
+            <div class="my-1 border-t border-line"></div>
+            <button type="button" role="menuitem" class="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm text-fg hover:bg-surface-hover" onclick={() => { projectMenuOpen = false; openPicker('directory'); }}><Plus size={15} /> Add project…</button>
+          </div>
+        {/if}
+      </div>
+      <div class="mx-0.5 h-5 w-px shrink-0 bg-line"></div>
       {#if editor.root}
         <IconButton label="Open file" size="sm" onclick={() => openPicker('file')}><FilePlus2 size={15} /></IconButton>
         <IconButton label="Close project" size="sm" onclick={requestCloseProject}><FolderX size={15} /></IconButton>
         <IconButton label="Refresh project files" size="sm" disabled={editor.treeLoading} onclick={() => void editor.loadDir(editor.dir)}><RefreshCw size={14} /></IconButton>
+        <IconButton label={editor.saving ? 'Saving…' : 'Save'} size="sm" disabled={!editor.activeDirty || editor.saving} onclick={() => void editor.save()}><Save size={15} /></IconButton>
       {:else}
-        <Button size="sm" variant="secondary" onclick={() => openPicker('directory')}><FolderOpen size={14} /> Open Project</Button>
+        <Button size="sm" variant="secondary" onclick={() => openPicker('directory')}><FolderOpen size={14} /> Add project</Button>
       {/if}
-      <IconButton label={editor.saving ? 'Saving…' : 'Save'} size="sm" disabled={!editor.activeDirty || editor.saving} onclick={() => void editor.save()}><Save size={15} /></IconButton>
-      <div class="mx-1 h-5 w-px bg-line"></div>
+      <div class="mx-1 h-5 w-px shrink-0 bg-line"></div>
       <IconButton label={terminalOpen ? 'Hide terminal' : 'Show terminal'} size="sm" onclick={() => { if (terminalOpen) terminalOpen = false; else void showTerminal(); }}><TerminalIcon size={15} /></IconButton>
+    </div>
+    <button type="button" aria-label="Search files" title="Search files" onclick={() => (commandOpen = true)} class="absolute left-1/2 top-1/2 hidden h-7 w-[min(28%,360px)] -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-md border border-line bg-surface px-2.5 text-left text-xs text-fg-subtle transition-colors hover:border-fg-faint hover:bg-surface-hover xl:flex">
+      <Search size={14} class="shrink-0 text-fg-faint" />
+      <span class="flex-1 truncate">Search files…</span>
+      <span class="flex items-center gap-0.5 text-[10px] text-fg-faint"><Command size={10} /> P</span>
+    </button>
+    <div class="flex shrink-0 items-center">
       <IconButton label={fullscreen ? 'Exit fullscreen' : 'Fullscreen'} size="sm" onclick={toggleFullscreen}>{#if fullscreen}<Minimize2 size={15} />{:else}<Maximize2 size={15} />{/if}</IconButton>
     </div>
-
   </div>
   <div class={["flex min-h-0 flex-1", resizingSidebar ? "select-none cursor-col-resize" : ""]}>
     {#if editor.root}
@@ -661,6 +740,15 @@
 <CommandPalette open={commandOpen} root={editor.root || '.'} onclose={() => (commandOpen = false)} onselectfile={(path) => { commandOpen = false; void editor.openFile(path); }} onaction={(action) => { commandOpen = false; if (action === 'open-file') openPicker('file'); else if (action === 'open-folder') openPicker('directory'); else if (action === 'save') void editor.save(); else if (action === 'save-all') void editor.saveAll(); else if (action === 'toggle-explorer') showTree = !showTree; else if (action === 'fullscreen') toggleFullscreen(); else if (action === 'refresh') void editor.loadDir(editor.dir); else if (action === 'toggle-terminal') { if (terminalOpen) terminalOpen = false; else void showTerminal(); } else if (action === 'new-terminal') { void showTerminal(true); } }} />
 <GlobalSearch open={globalSearchOpen} root={editor.root || '.'} onclose={() => (globalSearchOpen = false)} onselect={(path) => { globalSearchOpen = false; void editor.openFile(path); }} />
 <PathPicker open={pickerOpen} mode={pickerMode} initialPath={editor.root || '.'} onselect={pickPath} oncancel={() => (pickerOpen = false)} />
+
+<Modal open={projectSwitchOpen} title="Switch project?" width="max-w-md" onclose={() => void confirmSwitchProject('cancel')}>
+  <p class="px-4 py-4 text-sm text-fg-muted">This project has unsaved changes. Save them before switching to <strong class="text-fg">{pendingProject?.name ?? 'the selected project'}</strong>?</p>
+  {#snippet footer()}
+    <Button variant="ghost" onclick={() => void confirmSwitchProject('cancel')}>Cancel</Button>
+    <Button variant="secondary" onclick={() => void confirmSwitchProject('discard')}>Don't Save</Button>
+    <Button variant="primary" onclick={() => void confirmSwitchProject('save')}>Save & Switch</Button>
+  {/snippet}
+</Modal>
 
 <Modal open={closeProjectOpen} title="Close project?" width="max-w-md" onclose={() => (closeProjectOpen = false)}>
   <p class="px-4 py-4 text-sm text-fg-muted">This project has unsaved changes. Save them before closing the project?</p>

@@ -54,6 +54,18 @@ class EditorStore {
   }
 
   async openFolder(path: string, name?: string) {
+    const changingProject = this.root !== path;
+    if (changingProject) {
+      // Keep the previous project's persisted session intact, but never carry its
+      // in-memory tabs into the newly selected project.
+      // Let a pending debounced save finish with its captured previous-root data.
+      // Detach the timer handle so new-project edits cannot cancel that save.
+      this.saveTimer = undefined;
+      this.tabs = [];
+      this.activePath = '';
+      this.sessionRoot = '';
+      this.items = [];
+    }
     this.root = path;
     writeString(storageKeys.editorLastRoot, path);
     this.dir = path;
@@ -189,13 +201,13 @@ class EditorStore {
     clearTimeout(this.saveTimer);
     this.saveTimer = undefined;
     if (previousRoot) {
+      // Closing a project should remove it from the active editor, not erase its
+      // saved tabs or preview state. It remains available from the project menu.
       try {
-        localStorage.removeItem('omp-editor-preview:' + previousRoot);
         localStorage.removeItem(storageKeys.editorLastRoot);
       } catch {
         // Closing the project should still clear the editor if storage is unavailable.
       }
-      void workspaceStateApi.saveEditorSession(previousRoot, [], null).catch(() => {});
     }
     this.root = '';
     this.dir = '.';
