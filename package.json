@@ -11,7 +11,8 @@
     "cf:dev": "bun run cf:build && wrangler dev",
     "cf:migrate:local": "wrangler d1 migrations apply omp-control --local",
     "start": "bun ./build/index.js",
-    "cf:build": "OMP_CONTROL_TARGET=cloudflare bun run --bun build"
+    "cf:build": "OMP_CONTROL_TARGET=cloudflare bun run --bun build",
+    "cf:migrate:remote": "wrangler d1 migrations apply omp-control --remote"
   },
   "devDependencies": {
     "@eslym/sveltekit-adapter-bun": "^2.2.4",
