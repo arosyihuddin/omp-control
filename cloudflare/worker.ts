@@ -247,7 +247,7 @@ function allowed(path: string, method: string) {
   if (/^\/api\/tunnels\/[^/]+\/logs$/.test(path)) return method === "GET";
   if (/^\/api\/tunnels\/[^/]+\/stop$/.test(path)) return method === "POST" || method === "DELETE";
   if (/^\/api\/tools\/[^/]+$/.test(path)) return method === "PATCH";
-  if (/^\/api\/approvals\/[^/]+\/(approve|approve-session|deny)$/.test(path))
+  if (/^\/api\/approvals\/[^/]+\/(approve|deny)$/.test(path))
     return method === "POST";
   if (path === "/api/sessions") return method === "POST";
   return (

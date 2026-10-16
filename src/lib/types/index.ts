@@ -36,7 +36,7 @@ export interface Tool {
 }
 
 type ApprovalStatus = 'pending' | 'approved' | 'denied' | 'expired' | 'cancelled';
-export type ApprovalDecision = 'approve' | 'approve-session' | 'deny';
+export type ApprovalDecision = 'approve' | 'deny';
 
 export interface Approval {
   id: string;

@@ -13,14 +13,6 @@
 
   let { approval, busy = false, ondecide }: Props = $props();
 
-  const sessionAllowed = $derived(!!approval.sessionId && approval.risk !== 'high');
-  const sessionHint = $derived(
-    approval.risk === 'high'
-      ? 'High-risk operations always require approval.'
-      : approval.sessionId
-        ? 'Allow this tool for the rest of this session.'
-        : 'This request has no session scope.',
-  );
 </script>
 
 <Card class="overflow-hidden bg-surface">
@@ -37,9 +29,6 @@
       <Button size="sm" variant="danger" disabled={busy} onclick={() => ondecide('deny')}><CircleX size={13} /> Deny</Button>
       <Button size="sm" disabled={busy} title="Allow this operation once." onclick={() => ondecide('approve')}>
         <CircleCheck size={13} /> Allow once
-      </Button>
-      <Button size="sm" variant="primary" disabled={busy || !sessionAllowed} title={sessionHint} onclick={() => ondecide('approve-session')}>
-        <CircleCheck size={13} /> Allow for session
       </Button>
     </div>
   </div>

@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { ArrowLeft, ChevronDown, Folder, Wrench } from "@lucide/svelte";
   import { EmptyState, Modal, OptionDropdown, Panel, SearchInput } from "$lib/components/ui";
+  import MarkdownContent from "$lib/components/MarkdownContent.svelte";
   import { tools } from "$lib/stores/tools.svelte";
   import type { RiskLevel, Tool, ToolCustomRule, ToolPermission, ToolPermissionSection } from "$lib/types";
   import { CustomRuleBuilder, ToolListSkeleton, ToolRow } from "$features/tools";
@@ -40,7 +41,7 @@
   let risk = $state<RiskFilter>("all");
   let selectedName = $state<string | null>(null);
   type CustomRuleTarget = { kind: "tool"; tool: Tool } | { kind: "section"; section: ToolPermissionSection } | null;
-  let customRuleTarget = $state<CustomRuleTarget>(null);
+  let customRuleTarget = $state(null as CustomRuleTarget);
   const defaultCustomRule: ToolCustomRule = { version: 1, match: "all", conditions: [], action: "require_approval", fallbackAction: "require_approval" };
   const customRuleInitial = $derived.by(() => {
     const target = customRuleTarget;
@@ -88,7 +89,9 @@
     const saved = target.kind === "tool"
       ? await tools.setPermission(target.tool, "custom", rule)
       : await tools.setSectionPermission(target.section, "custom", rule);
-    if (saved) customRuleTarget = null;
+    if (saved) {
+      customRuleTarget = null;
+    }
     return saved;
   }
   function getCustomRuleFields(): ToolInputField[] {
@@ -180,7 +183,7 @@
     {#if selectedTool}
       <div class="space-y-5 p-4 sm:p-5">
       <div class="flex flex-wrap items-center gap-2"><span class="rounded-md border border-line bg-surface-muted px-2 py-1 font-mono text-sm text-fg">{selectedTool.name}</span><RiskBadge risk={selectedTool.risk} /><span class="text-xs text-fg-subtle">{selectedTool.group}</span></div>
-      <p class="max-w-3xl text-sm leading-6 text-fg-subtle">{selectedTool.description || "Tidak ada deskripsi untuk tool ini."}</p>
+      <MarkdownContent content={selectedTool.description || "Tidak ada deskripsi untuk tool ini."} class="max-w-3xl text-sm leading-6 text-fg-subtle" />
       <section class="rounded-lg border border-line">
         <div class="border-b border-line px-4 py-3"><h3 class="text-sm font-medium text-fg">Parameter yang tersedia</h3><p class="mt-1 text-xs leading-5 text-fg-subtle">Penjelasan parameter yang digunakan saat tool dijalankan.</p></div>
         {#if selectedTool.inputFields?.length}
@@ -188,32 +191,13 @@
             {#each selectedTool.inputFields as field (field.path)}
               <div class="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-start sm:gap-4">
                 <div class="min-w-0 sm:w-1/3"><p class="text-sm font-medium text-fg">{field.path.split(".").map((part) => part.replace(/[_-]+/g, " ").replace(/\b\w/g, (char) => char.toLocaleUpperCase())).join(" › ")}</p><p class="mt-0.5 text-xs text-fg-faint">{field.type === "boolean" ? "Ya atau tidak" : field.type === "integer" ? "Bilangan bulat" : field.type === "number" ? "Angka" : field.type === "array" ? "Daftar nilai" : field.type === "object" ? "Sekumpulan properti" : field.type === "enum" ? "Pilihan yang tersedia" : field.type === "string" ? "Teks" : "Nilai"}{field.required ? " · Harus diisi" : " · Opsional"}</p></div>
-                <div class="min-w-0 flex-1"><p class="text-sm leading-5 text-fg-subtle">{field.description || (field.path.split(".").at(-1) ?? field.path).replace(/[_-]+/g, " ").replace(/\b\w/g, (char) => char.toLocaleUpperCase()) + " yang digunakan tool ini."}</p>{#if field.enum?.length}<p class="mt-1 text-xs text-fg-faint">Pilihan: {field.enum.join(", ")}</p>{/if}</div>
+                <div class="min-w-0 flex-1"><MarkdownContent content={field.description || (field.path.split(".").at(-1) ?? field.path).replace(/[_-]+/g, " ").replace(/\b\w/g, (char) => char.toLocaleUpperCase()) + " yang digunakan tool ini."} class="text-sm leading-5 text-fg-subtle" />{#if field.enum?.length}<p class="mt-1 text-xs text-fg-faint">Pilihan: {field.enum.join(", ")}</p>{/if}</div>
               </div>
             {/each}
           </div>
         {:else}
           <p class="px-4 py-4 text-sm text-fg-subtle">Tool ini tidak menyediakan metadata parameter.</p>
         {/if}
-      </section>
-      <section class="max-w-2xl rounded-lg border border-line">
-        <div class="border-b border-line px-4 py-3"><h3 class="text-sm font-medium text-fg">Izin eksekusi</h3><p class="mt-0.5 text-xs text-fg-subtle">Atur bagaimana backend menangani pemanggilan tool ini.</p></div>
-        <div class="space-y-3 p-4">
-          <div class="flex flex-col gap-1.5 text-sm text-fg-subtle">
-            <span>Mode izin</span>
-            <OptionDropdown label="Mode izin" class="w-full" width="w-72" value={selectedTool.permissionOverride ?? "inherit"} disabled={tools.updating.has(selectedTool.name)} options={[{ value: "inherit", label: "Ikuti kebijakan bagian", description: "Gunakan izin default kategori" }, ...permissionOptions]} onchange={(value) => value === "custom" ? customRuleTarget = { kind: "tool", tool: selectedTool } : void tools.setPermission(selectedTool, value === "inherit" ? null : value as ToolPermission)} />
-          </div>
-          {#if (selectedTool.permissionOverride ?? selectedTool.permission) === "custom"}
-            <div class="flex flex-col gap-1.5 text-sm text-fg-subtle">
-              <span>Aturan kustom</span>
-              <button type="button" class="min-h-9 self-start rounded-md border border-line px-3 text-sm text-fg transition-colors hover:bg-surface-hover" disabled={tools.updating.has(selectedTool.name)} onclick={() => customRuleTarget = { kind: "tool", tool: selectedTool }}>Buka rule builder</button>
-            </div>
-          {/if}
-        </div>
-      </section>
-      <section class="flex max-w-2xl items-center justify-between gap-4 rounded-lg border border-line p-4">
-        <div><h3 class="text-sm font-medium text-fg">Exposure ke MCP clients</h3><p class="mt-0.5 text-xs text-fg-subtle">{selectedTool.exposed ? "Tool tersedia untuk client." : "Tool disembunyikan dari client."}</p></div>
-        <button type="button" role="switch" aria-checked={selectedTool.exposed} aria-label="Toggle exposure" disabled={tools.updating.has(selectedTool.name)} onclick={() => void tools.toggleExposure(selectedTool)} class={["relative inline-flex h-[18px] w-8 shrink-0 items-center rounded-full transition-colors disabled:opacity-50", selectedTool.exposed ? "bg-accent" : "bg-line-strong"]}><span class={["inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform", selectedTool.exposed ? "translate-x-[16px]" : "translate-x-[2px]"]}></span></button>
       </section>
       </div>
     {/if}
@@ -223,6 +207,6 @@
   title={customRuleTitle}
   initialRule={customRuleInitial}
   fields={getCustomRuleFields()}
-  oncancel={() => customRuleTarget = null}
+  oncancel={() => { customRuleTarget = null; }}
   onsave={saveCustomRule}
 />
