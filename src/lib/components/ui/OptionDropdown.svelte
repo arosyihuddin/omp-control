@@ -10,10 +10,12 @@
     label: string;
     disabled?: boolean;
     width?: string;
+    placement?: "bottom" | "top" | "auto";
+    offsetX?: number;
     class?: string;
     onchange?: (value: T) => void;
   }
-  let { options, value, label, disabled = false, width = "w-64", class: className = "", onchange }: Props = $props();
+  let { options, value, label, disabled = false, width = "w-64", placement = "bottom", offsetX = 0, class: className = "", onchange }: Props = $props();
   let open = $state(false);
   const selectedLabel = $derived(options.find((option) => option.value === value)?.label ?? value);
   function choose(next: T, close: () => void) {
@@ -22,7 +24,7 @@
   }
 </script>
 
-<Menu bind:open align="right" placement="bottom" {width}>
+<Menu bind:open align="right" {placement} {width} {offsetX}>
   {#snippet trigger({ toggle, open: menuOpen })}
     <button
       type="button"
@@ -42,9 +44,6 @@
     </button>
   {/snippet}
   {#snippet children({ close })}
-    <div class="mb-1 border-b border-line px-2.5 py-2">
-      <div class="text-[10px] font-semibold uppercase tracking-wider text-fg-faint">{label}</div>
-    </div>
     {#each options as option (option.value)}
       <MenuItem class={["gap-2.5 py-2 text-sm", value === option.value && "bg-surface-hover text-fg"]} aria-current={value === option.value ? "true" : undefined} onclick={() => choose(option.value, close)}>
         <span class="flex size-4 shrink-0 items-center justify-center">{#if value === option.value}<Check size={14} strokeWidth={2} />{/if}</span>

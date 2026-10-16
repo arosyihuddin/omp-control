@@ -2,11 +2,27 @@ export type RiskLevel = 'low' | 'medium' | 'high' | 'isolated';
 
 export type ToolPermission = 'always_allow' | 'require_approval' | 'blocked' | 'custom';
 export type ToolPermissionSection = 'read_only' | 'edit_delete' | 'other';
-export type ToolCustomRule = 'approval' | 'high_risk' | 'block_high_risk';
+export type ToolCategory = 'system_diagnostics' | 'desktop_automation' | 'files_search' | 'code_development' | 'terminal_execution' | 'web_research' | 'network_tunnels' | 'agent_workflow';
+export type ToolCustomRuleAction = 'allow' | 'require_approval' | 'block';
+export type ToolCustomRuleOperator = 'equals' | 'not_equals' | 'contains' | 'not_contains' | 'starts_with' | 'ends_with' | 'greater_than' | 'less_than' | 'exists' | 'not_exists' | 'in' | 'not_in';
+export interface ToolInputField { path: string; type: 'string' | 'number' | 'integer' | 'boolean' | 'array' | 'object' | 'enum' | 'unknown'; required: boolean; description?: string; enum?: string[]; }
+export interface ToolCustomRuleCondition {
+  field: string;
+  operator: ToolCustomRuleOperator;
+  value?: string;
+}
+export interface ToolCustomRule {
+  version: 1;
+  match: 'all' | 'any';
+  conditions: ToolCustomRuleCondition[];
+  action: ToolCustomRuleAction;
+  fallbackAction: ToolCustomRuleAction;
+}
 
 export interface Tool {
   name: string;
   group: string;
+  category: ToolCategory;
   risk: RiskLevel;
   description: string;
   exposed: boolean;
@@ -16,6 +32,7 @@ export interface Tool {
   sectionPermission: ToolPermission;
   customRule: ToolCustomRule;
   sectionCustomRule: ToolCustomRule;
+  inputFields: ToolInputField[];
 }
 
 type ApprovalStatus = 'pending' | 'approved' | 'denied' | 'expired' | 'cancelled';

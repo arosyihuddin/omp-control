@@ -146,7 +146,6 @@ function runtimeRouteAllowed(path: string, method: string): boolean {
   if (new RegExp("^/api/tunnels/[^/]+/logs$").test(path)) return method === "GET";
   if (new RegExp("^/api/tunnels/[^/]+/stop$").test(path)) return method === "POST" || method === "DELETE";
   if (new RegExp("^/api/tools/sections/(read_only|edit_delete|other)/permission$").test(path)) return method === "PATCH";
-  if (new RegExp("^/api/tools/sections/(read_only|edit_delete|other)/permission$").test(path)) return method === "PATCH";
   if (new RegExp("^/api/tools/[^/]+$").test(path)) return method === "PATCH";
   if (new RegExp("^/api/approvals/[^/]+/(approve|approve-session|deny)$").test(path)) return method === "POST";
   return false;

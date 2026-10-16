@@ -18,30 +18,34 @@ class ToolsStore {
     }
   }
 
-  async setPermission(tool: Tool, permission: ToolPermission | null, customRule?: ToolCustomRule) {
-    if (this.updating.has(tool.name)) return;
+  async setPermission(tool: Tool, permission: ToolPermission | null, customRule?: ToolCustomRule): Promise<boolean> {
+    if (this.updating.has(tool.name)) return false;
     this.updating = new Set(this.updating).add(tool.name);
     this.error = '';
     try {
       const updated = await toolsApi.setPermission(tool.name, permission, customRule);
       this.items = this.items.map((item) => item.name === tool.name ? updated : item);
+      return true;
     } catch (error) {
       this.error = errorMessage(error, 'Unable to update tool permission');
+      return false;
     } finally {
       const next = new Set(this.updating); next.delete(tool.name); this.updating = next;
     }
   }
 
-  async setSectionPermission(section: Tool['section'], permission: ToolPermission, customRule?: ToolCustomRule) {
+  async setSectionPermission(section: Tool['section'], permission: ToolPermission, customRule?: ToolCustomRule): Promise<boolean> {
     const names = this.items.filter((tool) => tool.section === section).map((tool) => tool.name);
-    if (!names.length || names.some((name) => this.updating.has(name))) return;
+    if (!names.length || names.some((name) => this.updating.has(name))) return false;
     this.updating = new Set([...this.updating, ...names]);
     this.error = '';
     try {
       const response = await toolsApi.setSectionPermission(section, permission, customRule);
       this.items = response.tools;
+      return true;
     } catch (error) {
       this.error = errorMessage(error, 'Unable to update section permission');
+      return false;
     } finally {
       const next = new Set(this.updating); names.forEach((name) => next.delete(name)); this.updating = next;
     }

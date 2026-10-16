@@ -70,6 +70,8 @@ For local Worker emulation, run `bun run cf:migrate:local` once, then `bun run c
 
 ## 🔌 API overview
 
+The Tools page reads `GET /api/tools` from the selected OMP-MCP runtime through the instance runtime proxy. OMP-Control does not maintain a separate tool catalog: native tools are discovered by OMP-MCP, while OMP-MCP supplies metadata, exposure state, and effective permissions. Permission and exposure changes are sent back to that same runtime. Custom rules are stored and evaluated by OMP-MCP before tool execution.
+
 Registry endpoints:
 
 - GET /control/v1/instances
