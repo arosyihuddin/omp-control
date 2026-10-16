@@ -217,6 +217,7 @@ const exact: Record<string, string[]> = {
   "/api/omp/config/reset": ["POST"],
   "/api/terminals": ["GET", "POST"],
   "/api/tools": ["GET"],
+  "/api/root-commands": ["GET", "PUT"],
   "/api/logs": ["GET"],
   "/api/approvals": ["GET"],
   "/api/approvals/clear": ["POST"],

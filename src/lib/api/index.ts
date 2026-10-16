@@ -82,6 +82,14 @@ export const toolsApi = {
     }),
 };
 
+export interface RootCommandRule { command: string; args: string[]; enabled: boolean; }
+export interface RootCommandConfig { rules: RootCommandRule[]; passwordConfigured: boolean; encryptionConfigured: boolean; }
+export const rootCommandsApi = {
+  get: () => request<RootCommandConfig>("/api/root-commands"),
+  save: (body: { rules: RootCommandRule[]; password?: string; clearPassword?: boolean }) =>
+    request<RootCommandConfig>("/api/root-commands", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
+};
+
 export const approvalsApi = {
   list: async () => (await request<{ approvals: Approval[] }>('/api/approvals')).approvals ?? [],
   decide: (id: string, decision: ApprovalDecision) => postJson(`/api/approvals/${enc(id)}/${decision}`),

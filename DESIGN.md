@@ -1,4 +1,4 @@
-# OMP Control — Style Guide
+# OMP Control — Design System
 
 This document defines the visual language for OMP Control. It is the source of truth for UI styling decisions and should be consulted before introducing new colors, surfaces, cards, controls, or interaction patterns.
 

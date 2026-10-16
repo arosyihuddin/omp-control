@@ -82,10 +82,13 @@ Registry endpoints:
 
 Base URLs must be HTTP(S), must not contain embedded credentials/query/fragment, and must use HTTPS except for loopback development instances. Health checks use a 4-second timeout and do not follow redirects. Terminal WebSocket forwarding works for instances without a bearer credential; authenticated WebSocket proxying remains pending.
 
-## 📚 Documentation
+## Documentation
 
-- `STYLEGUIDE.md` — visual design principles, light/dark palette, surface and card rules, and UI implementation conventions.
+- `DESIGN.md` — visual principles, design tokens, component styling, and UI interaction conventions.
+- `ARCHITECTURE.md` — control-plane/runtime boundaries, deployment modes, API flow, and security invariants.
+- `CONTRIBUTING.md` — local development, validation, UI conventions, and contribution checklist.
+- `docs/API_CONTRACT.md` — control-plane API contract and runtime proxy constraints.
 
-## 🧩 Related project
+## Related project
 
-- **OMP-MCP** — runtime server that provides agent sessions and native MCP tools.
+- **OMP-MCP** — runtime server that provides agent sessions, native MCP tools, and runtime control APIs.

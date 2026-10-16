@@ -14,16 +14,17 @@ function initializeDatabase(): Database {
   } finally {
     process.umask(previousUmask);
   }
-  database.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
+  database.run("PRAGMA journal_mode = WAL");
+  database.run("PRAGMA foreign_keys = ON");
   try {
     chmodSync(dirname(dbPath), 0o700);
     chmodSync(dbPath, 0o600);
     chmodSync(dbPath + "-wal", 0o600);
     chmodSync(dbPath + "-shm", 0o600);
   } catch {}
-  database.exec("CREATE TABLE IF NOT EXISTS instances (id TEXT PRIMARY KEY, name TEXT NOT NULL, base_url TEXT NOT NULL, credential TEXT, status TEXT NOT NULL DEFAULT 'unknown', version TEXT, last_seen_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)");
-  database.exec("CREATE TABLE IF NOT EXISTS auth_users (id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, created_at TEXT NOT NULL)");
-  database.exec("CREATE TABLE IF NOT EXISTS auth_sessions (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE, expires_at INTEGER NOT NULL)");
+  database.run("CREATE TABLE IF NOT EXISTS instances (id TEXT PRIMARY KEY, name TEXT NOT NULL, base_url TEXT NOT NULL, credential TEXT, status TEXT NOT NULL DEFAULT 'unknown', version TEXT, last_seen_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)");
+  database.run("CREATE TABLE IF NOT EXISTS auth_users (id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, created_at TEXT NOT NULL)");
+  database.run("CREATE TABLE IF NOT EXISTS auth_sessions (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE, expires_at INTEGER NOT NULL)");
   return database;
 }
 let database: Database | undefined;
@@ -110,6 +111,7 @@ async function checkHealth(id: string) {
 
 function runtimeRouteAllowed(path: string, method: string): boolean {
   const exact: Record<string, string[]> = {
+    "/api/root-commands": ["GET", "PUT"],
     "/api/dashboard": ["GET"],
     "/api/events": ["GET"],
     "/api/tunnels": ["GET", "POST"],
@@ -190,7 +192,7 @@ async function proxyRuntime(req: Request, instanceId: string, path: string, inco
 }
 
 
-async function upgradeRuntimeSocket(req: Request, platform: any, instanceId: string, path: string, incoming: URL): Promise<Response> {
+async function upgradeRuntimeSocket(platform: any, instanceId: string, path: string, incoming: URL): Promise<Response> {
   const row = db.query("SELECT base_url,credential FROM instances WHERE id = ?").get(instanceId) as { base_url: string; credential: string | null } | null;
   if (!row) return fail("NOT_FOUND", "Instance not found", 404);
   if (path !== "/api/terminal/socket") {
@@ -312,7 +314,7 @@ export async function handleControlRequest(req: Request, server?: any): Promise<
 
     const runtimeMatch = url.pathname.match(/^\/control\/v1\/instances\/([^/]+)\/runtime(\/.*)$/);
     if (runtimeMatch && runtimeMatch[2] === "/api/terminal/socket" && req.headers.get("upgrade")?.toLowerCase() === "websocket") {
-      return await upgradeRuntimeSocket(req, server, decodeURIComponent(runtimeMatch[1]), runtimeMatch[2], url);
+      return await upgradeRuntimeSocket(server, decodeURIComponent(runtimeMatch[1]), runtimeMatch[2], url);
     }
     if (runtimeMatch) return await proxyRuntime(req, decodeURIComponent(runtimeMatch[1]), runtimeMatch[2], url);
     if (url.pathname === "/control/v1/instances" && req.method === "GET") return send({ instances: (listRows() as Row[]).map(publicInstance) });

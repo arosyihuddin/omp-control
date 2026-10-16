@@ -5,7 +5,6 @@ export const storageKeys = {
   terminalSessionsOpen: 'omp-mcp-terminal-sessions-open',
   terminalActiveId: 'omp-mcp-terminal-active-id',
   editorLastRoot: 'omp-editor-last-root',
-  sessionsLastRoot: 'omp-sessions-last-root',
   workspaceFavorites: 'omp-workspace-favorites',
   workspaceRecents: 'omp-workspace-recents',
   workspaceView: 'omp-workspace-view',

@@ -1,9 +1,7 @@
 import {
-  Brain,
   Code2,
   Folder,
   LayoutDashboard,
-  ListChecks,
   Network,
   ScrollText,
   ShieldCheck,
