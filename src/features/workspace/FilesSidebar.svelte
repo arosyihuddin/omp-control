@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { FilePlus, FolderPlus, Home, PinOff, Plus } from '@lucide/svelte';
+  import { FilePlus, FolderPlus, HardDrive, Home, PinOff, Plus } from '@lucide/svelte';
   import { IconButton, Menu, MenuItem } from '$lib/components/ui';
   import { browser } from './browser.svelte';
   import FileIcon from '$lib/components/workspace/FileIcon.svelte';
@@ -28,7 +28,7 @@
   <ul class="space-y-0.5">
     <li>
       <button type="button" class={['flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-base transition-colors hover:bg-surface-hover hover:text-fg', browser.path === '/' ? 'bg-surface-active text-fg' : 'text-fg-subtle']} onclick={() => browser.navigate('/')}>
-        <Home size={14} class="shrink-0" /> /
+        <HardDrive size={14} class="shrink-0" /> /
       </button>
     </li>
     <li>
@@ -88,7 +88,7 @@
       ]}
       onclick={() => browser.navigate(place.path)}
     >
-      {#if place.path === '.' || place.path === '/'}<Home size={13} class="shrink-0" />{:else}<FileIcon item={{ name: place.name, type: 'directory' }} size={13} />{/if}
+      {#if place.path === '/'}<HardDrive size={13} class="shrink-0" />{:else if place.path === '.'}<Home size={13} class="shrink-0" />{:else}<FileIcon item={{ name: place.name, type: 'directory' }} size={13} />{/if}
       {place.name}
     </button>
   {/each}

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ArrowLeft, ArrowRight, Check, Home, LayoutGrid, List, MoreVertical, PanelLeft, type LucideIcon } from '@lucide/svelte';
+  import { ArrowLeft, ArrowRight, Check, HardDrive, Home, LayoutGrid, List, MoreVertical, PanelLeft, type LucideIcon } from '@lucide/svelte';
   import { IconButton, Menu, MenuItem, SearchInput, SegmentedControl } from '$lib/components/ui';
   import { browser } from './browser.svelte';
   import { prefs, type FileView } from './preferences.svelte';
@@ -28,7 +28,7 @@
       class="flex h-8 min-w-0 flex-1 items-center gap-0.5 overflow-x-auto rounded-md border border-line bg-surface px-1 font-mono text-sm text-fg-muted"
     >
       <button type="button" class="flex h-6 shrink-0 items-center gap-1 rounded px-1.5 leading-none hover:bg-surface-hover hover:text-fg" onclick={() => browser.navigate(absolute ? '/' : '.')}>
-        <Home size={12} class="block shrink-0" />
+        {#if absolute}<HardDrive size={12} class="block shrink-0" />{:else}<Home size={12} class="block shrink-0" />{/if}
         <span class="relative top-px inline-flex items-center leading-none">{absolute ? '/' : '/home'}</span>
       </button>
       {#each segments as segment, index (index)}

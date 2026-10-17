@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Code2, FilePlus2, FolderOpen, ChevronRight, ChevronDown, RefreshCw, Save, X, Circle, File, PanelLeft, Check, AlertCircle, Home, Maximize2, Minimize2, Search, Command, FolderX, Terminal as TerminalIcon, Plus, GitBranch } from '@lucide/svelte';
+  import { Code2, FilePlus2, FolderOpen, ChevronRight, ChevronDown, RefreshCw, Save, X, Circle, File, PanelLeft, Check, AlertCircle, Home, HardDrive, Maximize2, Minimize2, Search, Command, FolderX, Terminal as TerminalIcon, Plus, GitBranch } from '@lucide/svelte';
   import { Button, IconButton, Modal, EmptyState, ContextMenu, MenuItem } from '$lib/components/ui';
   import { basename, displayPath, joinPath, isHidden } from '$lib/utils/workspace';
   import EditorTreeItem from './EditorTreeItem.svelte';
@@ -658,7 +658,7 @@
       {/if}
       {#if selectedDiff}
         <div class="flex items-center gap-1 overflow-x-auto border-b border-line px-3 py-2 text-xs text-fg-faint">
-          <Home size={13} class="shrink-0" />
+          <HardDrive size={13} class="shrink-0" />
           {#each selectedDiff.path.split('/').filter(Boolean) as crumb, index (index)}
             <ChevronRight size={12} class="shrink-0" />
             <span class={index === selectedDiff.path.split('/').filter(Boolean).length - 1 ? 'truncate text-fg-muted' : 'shrink-0'}>{crumb}</span>
@@ -690,7 +690,7 @@
             <div class="p-4 text-sm text-fg-subtle">Opening file…</div>
           {:else if editor.activeTab}
             <div class="flex items-center gap-1 overflow-x-auto border-b border-line px-3 py-2 text-xs text-fg-faint">
-              <Home size={13} class="shrink-0" />
+              <HardDrive size={13} class="shrink-0" />
               {#each editor.activeTab.path.split('/').filter(Boolean) as crumb, index (index)}
                 <ChevronRight size={12} class="shrink-0" />
                 <span class={index === editor.activeTab.path.split('/').filter(Boolean).length - 1 ? 'truncate text-fg-muted' : 'shrink-0'}>{crumb}</span>

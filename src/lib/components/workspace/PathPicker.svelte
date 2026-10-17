@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ArrowUp, ChevronRight, Eye, EyeOff, Home } from '@lucide/svelte';
+  import { ArrowUp, ChevronRight, Eye, EyeOff, HardDrive, Home } from '@lucide/svelte';
   import { Button, EmptyState, IconButton, Modal, SearchInput, Skeleton } from '$lib/components/ui';
   import { errorMessage, workspaceApi } from '$lib/api';
   import type { WorkspaceItem } from '$lib/types';
@@ -133,7 +133,7 @@
         <ArrowUp size={15} />
       </IconButton>
       <nav class="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto text-sm" aria-label="Path">
-        <button type="button" class="flex h-6 shrink-0 items-center gap-1 rounded px-1.5 text-fg-muted hover:bg-surface-hover hover:text-fg" onclick={() => load('/') }><Home size={13} /> /</button>
+        <button type="button" class="flex h-6 shrink-0 items-center gap-1 rounded px-1.5 text-fg-muted hover:bg-surface-hover hover:text-fg" onclick={() => load('/') }><HardDrive size={13} /> /</button>
         <button
           type="button"
           class="flex h-6 shrink-0 items-center gap-1 rounded px-1.5 text-fg-muted hover:bg-surface-hover hover:text-fg"
