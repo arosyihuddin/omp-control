@@ -34,6 +34,7 @@
   onMount(async () => {
     refreshing = true;
     await instanceRegistry.load();
+    await instanceRegistry.checkAllHealth();
     error = instanceRegistry.error;
     refreshing = false;
   });
@@ -92,8 +93,7 @@
     openMenuId = null;
     checkingHealth = instance.id;
     try {
-      const result = await instancesApi.health(instance.id);
-      await instanceRegistry.load();
+      const result = await instanceRegistry.checkHealth(instance.id);
       if (result.status === 'online') toast.success(instance.name + ' is online', result.latencyMs + ' ms');
       else toast.info(instance.name + ' health check', result.error ?? 'Status: ' + result.status);
     } catch (e) {
@@ -115,18 +115,18 @@
 
   async function saveCreate(event: SubmitEvent) {
     event.preventDefault();
-    if (createSaving || !createName.trim() || !createUrl.trim()) return;
+    if (createSaving || !createName.trim() || !createUrl.trim() || !createCredential.trim()) return;
     const hadActiveInstance = Boolean(instanceRegistry.activeId);
     createSaving = true;
     createError = '';
     try {
-      await instancesApi.create({ name: createName.trim(), baseUrl: createUrl.trim(), ...(createCredential.trim() ? { credential: createCredential.trim() } : {}) });
+      await instancesApi.create({ name: createName.trim(), baseUrl: createUrl.trim(), credential: createCredential.trim() });
       creating = false;
       await instanceRegistry.load();
-      toast.success('Instance added', createName.trim() + ' is ready to use.');
+      toast.success('Instance added', createName.trim() + ' connected successfully.');
       if (!hadActiveInstance && instanceRegistry.active) onenter();
     } catch (e) {
-      createError = e instanceof Error ? e.message : 'Unable to register instance';
+      createError = e instanceof Error ? e.message : 'Connection test failed. Instance was not added.';
     } finally {
       createSaving = false;
     }
@@ -236,7 +236,7 @@
   <form id="picker-instance-edit" class="space-y-4 px-4 py-4" onsubmit={saveEdit}>
     <label class="block space-y-1.5 text-sm"><span class="text-fg-subtle">Display name</span><input required maxlength="80" bind:value={editName} class="h-10 w-full rounded-lg border border-line bg-canvas px-3 text-fg outline-none focus:border-accent"/></label>
     <label class="block space-y-1.5 text-sm"><span class="text-fg-subtle">Base URL</span><input required type="url" bind:value={editUrl} class="h-10 w-full rounded-lg border border-line bg-canvas px-3 text-fg outline-none focus:border-accent"/><span class="block text-xs text-fg-faint">Use HTTPS except for localhost development instances.</span></label>
-    <label class="block space-y-1.5 text-sm"><span class="text-fg-subtle">Bearer token <span class="text-fg-faint">(optional)</span></span><input type="password" autocomplete="new-password" bind:value={editCredential} placeholder="Leave blank to keep current token" class="h-10 w-full rounded-lg border border-line bg-canvas px-3 text-fg outline-none focus:border-accent"/></label>
+    <label class="block space-y-1.5 text-sm"><span class="text-fg-subtle">Bearer token</span><input type="password" autocomplete="new-password" bind:value={editCredential} placeholder="Leave blank to keep current token" class="h-10 w-full rounded-lg border border-line bg-canvas px-3 text-fg outline-none focus:border-accent"/><span class="block text-xs text-fg-faint">Leave blank to keep the current token.</span></label>
     {#if actionError}<div role="alert" class="flex items-start gap-2 rounded-lg border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-500 dark:text-red-200"><CircleAlert size={16}/>{actionError}</div>{/if}
   </form>
   {#snippet footer()}
@@ -249,12 +249,12 @@
   <form id="picker-instance-create" class="space-y-4 px-4 py-4" onsubmit={saveCreate}>
     <label class="block space-y-1.5 text-sm"><span class="text-fg-subtle">Display name</span><input required maxlength="80" bind:value={createName} class="h-10 w-full rounded-lg border border-line bg-canvas px-3 text-fg outline-none focus:border-accent" placeholder="My OMP-MCP server"/></label>
     <label class="block space-y-1.5 text-sm"><span class="text-fg-subtle">Base URL</span><input required type="url" bind:value={createUrl} class="h-10 w-full rounded-lg border border-line bg-canvas px-3 text-fg outline-none focus:border-accent"/><span class="block text-xs text-fg-faint">Use HTTPS except for localhost development instances.</span></label>
-    <label class="block space-y-1.5 text-sm"><span class="text-fg-subtle">Bearer token <span class="text-fg-faint">(optional)</span></span><input type="password" autocomplete="new-password" bind:value={createCredential} placeholder="Enter token if required" class="h-10 w-full rounded-lg border border-line bg-canvas px-3 text-fg outline-none focus:border-accent"/></label>
+    <label class="block space-y-1.5 text-sm"><span class="text-fg-subtle">Bearer token</span><input required type="password" autocomplete="new-password" bind:value={createCredential} placeholder="Paste OMP_API_TOKEN from server setup" class="h-10 w-full rounded-lg border border-line bg-canvas px-3 text-fg outline-none focus:border-accent"/><span class="block text-xs text-fg-faint">Required. Use the token generated during OMP-MCP setup.</span></label>
     {#if createError}<div role="alert" class="flex items-start gap-2 rounded-lg border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-500 dark:text-red-200"><CircleAlert size={16}/>{createError}</div>{/if}
   </form>
   {#snippet footer()}
     <button type="button" class="h-9 rounded-lg px-3 text-sm text-fg-subtle hover:bg-surface-hover disabled:opacity-50" onclick={() => { if (!createSaving) creating = false; }} disabled={createSaving}>Cancel</button>
-    <button type="submit" form="picker-instance-create" disabled={createSaving || !createName.trim() || !createUrl.trim()} class="inline-flex h-9 items-center gap-2 rounded-lg bg-accent px-3 text-sm font-medium text-canvas hover:bg-accent-hover disabled:opacity-50">{#if createSaving}<Skeleton class="size-4 rounded-full" />{:else}<Plus size={15}/>{/if} Add server</button>
+    <button type="submit" form="picker-instance-create" disabled={createSaving || !createName.trim() || !createUrl.trim() || !createCredential.trim()} class="inline-flex h-9 items-center gap-2 rounded-lg bg-accent px-3 text-sm font-medium text-canvas hover:bg-accent-hover disabled:opacity-50">{#if createSaving}<Skeleton class="size-4 rounded-full" />Testing connection…{:else}<Plus size={15}/>Add server{/if}</button>
   {/snippet}
 </Modal>
 <ConfirmDialog open={Boolean(pendingDelete)} title="Remove instance?" description={pendingDelete ? 'Remove "' + pendingDelete.name + '" from this control plane? The remote server will not be changed.' : 'This instance will be removed from this control plane.'} confirmLabel="Remove instance" destructive onconfirm={confirmRemoveInstance} oncancel={() => (pendingDelete = null)} />

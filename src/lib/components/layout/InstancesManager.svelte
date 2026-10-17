@@ -7,7 +7,7 @@
 
   interface Props { onenter: () => void; }
   let { onenter }: Props = $props();
-  let instances = $state<Instance[]>([]);
+  const instances = $derived(instanceRegistry.items);
   let loading = $state(true), saving = $state(false), showForm = $state(false);
   let editing = $state<Instance | null>(null);
   let error = $state("");
@@ -19,8 +19,8 @@
   async function load() {
     loading = true; error = "";
     try {
-      instances = (await instancesApi.list()).instances;
       await instanceRegistry.load();
+      await instanceRegistry.checkAllHealth();
     } catch (e) { error = e instanceof Error ? e.message : "Unable to load instances"; }
     finally { loading = false; }
   }
@@ -37,7 +37,7 @@
     showForm = false; editing = null; error = "";
   }
   async function saveInstance() {
-    if (saving || !name.trim() || !baseUrl.trim()) return;
+    if (saving || !name.trim() || !baseUrl.trim() || (!editing && !credential.trim())) return;
     const wasEditing = Boolean(editing);
     const instanceName = name.trim();
     const hadActiveInstance = Boolean(instanceRegistry.activeId);
@@ -50,23 +50,22 @@
           ...(credential.trim() ? { credential: credential.trim() } : {}),
         });
       } else {
-        await instancesApi.create({ name: instanceName, baseUrl: baseUrl.trim(), ...(credential.trim() ? { credential: credential.trim() } : {}) });
+        await instancesApi.create({ name: instanceName, baseUrl: baseUrl.trim(), credential: credential.trim() });
       }
       showForm = false; editing = null;
       name = ""; baseUrl = "http://127.0.0.1:48766"; credential = "";
       await load();
-      toast.success(wasEditing ? "Instance updated" : "Instance registered", instanceName);
+      toast.success(wasEditing ? "Instance updated" : "Instance registered", wasEditing ? instanceName : instanceName + " connected successfully.");
       if (!hadActiveInstance && instanceRegistry.active) onenter();
     } catch (e) {
-      error = e instanceof Error ? e.message : (wasEditing ? "Unable to update instance" : "Unable to register instance");
-      toast.error("Instance save failed", error);
+      error = e instanceof Error ? e.message : (wasEditing ? "Unable to update instance" : "Connection test failed. Instance was not added.");
+      toast.error(wasEditing ? "Instance save failed" : "Connection test failed", error);
     } finally { saving = false; }
   }
   async function check(instance: Instance) {
     checking = instance.id; error = "";
     try {
-      const result = await instancesApi.health(instance.id);
-      await load();
+      const result = await instanceRegistry.checkHealth(instance.id);
       if (result.status === "online") toast.success(instance.name + " is online", result.latencyMs + " ms");
       else toast.info(instance.name + " is offline", result.error ?? "Health check failed");
     } catch (e) {
@@ -154,12 +153,12 @@
   <form id="settings-instance-form" class="space-y-4 px-4 py-4" onsubmit={(event) => { event.preventDefault(); void saveInstance(); }}>
     <label class="block space-y-1.5 text-sm"><span class="text-fg-subtle">Display name</span><input required maxlength="80" bind:value={name} placeholder="Production server" class="h-10 w-full rounded-lg border border-line bg-canvas px-3 outline-none focus:border-accent"/></label>
     <label class="block space-y-1.5 text-sm"><span class="text-fg-subtle">Base URL</span><input required type="url" bind:value={baseUrl} placeholder="https://omp.example.com" class="h-10 w-full rounded-lg border border-line bg-canvas px-3 outline-none focus:border-accent"/><span class="block text-xs text-fg-faint">Use HTTPS except for localhost development instances.</span></label>
-    <label class="block space-y-1.5 text-sm"><span class="text-fg-subtle">Bearer token <span class="text-fg-faint">(optional)</span></span><input type="password" autocomplete="new-password" bind:value={credential} placeholder={editing ? "Leave blank to keep current token" : "Stored server-side; never shown again"} class="h-10 w-full rounded-lg border border-line bg-canvas px-3 outline-none focus:border-accent"/></label>
+    <label class="block space-y-1.5 text-sm"><span class="text-fg-subtle">Bearer token{editing ? "" : ""}</span><input type="password" autocomplete="new-password" required={!editing} bind:value={credential} placeholder={editing ? "Leave blank to keep current token" : "Paste OMP_API_TOKEN from server setup"} class="h-10 w-full rounded-lg border border-line bg-canvas px-3 outline-none focus:border-accent"/><span class="block text-xs text-fg-faint">{editing ? "Leave blank to keep the current token." : "Required. Use the token generated during OMP-MCP setup."}</span></label>
     {#if error}<div role="alert" class="flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/5 p-3 text-sm text-red-500"><CircleAlert size={16} class="mt-0.5 shrink-0"/><span>{error}</span></div>{/if}
   </form>
   {#snippet footer()}
     <button type="button" class="h-9 rounded-lg px-3 text-sm hover:bg-surface-hover disabled:opacity-50" onclick={closeForm} disabled={saving}>Cancel</button>
-    <button type="submit" form="settings-instance-form" disabled={saving || !name.trim() || !baseUrl.trim()} class="inline-flex h-9 items-center gap-2 rounded-lg bg-accent px-3 text-sm font-medium text-white disabled:opacity-50">{#if saving}<Skeleton class="size-4 rounded-full" />{:else if editing}<Check size={15}/>{:else}<Plus size={15}/>{/if} {editing ? "Save changes" : "Register instance"}</button>
+    <button type="submit" form="settings-instance-form" disabled={saving || !name.trim() || !baseUrl.trim() || (!editing && !credential.trim())} class="inline-flex h-9 items-center gap-2 rounded-lg bg-accent px-3 text-sm font-medium text-white disabled:opacity-50">{#if saving}<Skeleton class="size-4 rounded-full" />{saving && !editing ? "Testing connection…" : "Saving changes…"}{:else if editing}<Check size={15}/>Save changes{:else}<Plus size={15}/>Add server{/if}</button>
   {/snippet}
 </Modal>
 <ConfirmDialog open={Boolean(pendingDelete)} title="Remove instance?" description={pendingDelete ? 'Remove "' + pendingDelete.name + '" from this control plane? The remote server will not be changed.' : 'This instance will be removed from this control plane.'} confirmLabel="Remove instance" destructive onconfirm={confirmRemove} oncancel={() => (pendingDelete = null)} />

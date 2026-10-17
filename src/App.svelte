@@ -101,6 +101,15 @@
     };
   });
 
+  // Keep the selected runtime's health current whenever the user enters or changes pages.
+  // The registry is the single source of truth for instance status across the UI.
+  $effect(() => {
+    const activeId = instanceRegistry.activeId;
+    const currentRoute = router.current;
+    if (!authenticated || !activeId || !currentRoute) return;
+    void instanceRegistry.checkHealth(activeId).catch(() => {});
+  });
+
   // Workspace preferences are loaded only when entering a workspace route.
   $effect(() => {
     if (authenticated && instanceRegistry.active && router.inWorkspace) void prefs.init();

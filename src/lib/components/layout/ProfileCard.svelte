@@ -1,7 +1,6 @@
 <script lang="ts">
   import { ArrowLeftRight, LogOut, Server, Settings } from '@lucide/svelte';
   import { Avatar, Menu, MenuItem } from '$lib/components/ui';
-  import { dashboard } from '$lib/stores/dashboard.svelte';
   import { profile } from '$lib/stores/profile.svelte';
   import { instanceRegistry } from '$lib/stores/instances.svelte';
   import ProfileModal from './ProfileModal.svelte';
@@ -19,7 +18,9 @@
 
   const name = $derived(profile.data?.displayName ?? 'Profile');
   const instanceName = $derived(instanceRegistry.active?.name ?? 'No instance selected');
-  const status = $derived(dashboard.connected ? 'Connected' : 'Disconnected');
+  const instanceStatus = $derived(instanceRegistry.active?.status ?? 'unknown');
+  const isChecking = $derived(instanceRegistry.checkingIds.includes(instanceRegistry.activeId ?? ''));
+  const status = $derived(isChecking ? 'Checking…' : instanceStatus === 'online' ? 'Online' : instanceStatus === 'offline' ? 'Offline' : instanceStatus === 'degraded' ? 'Degraded' : 'Unknown');
 </script>
 
 <Menu align="right" {placement} width="w-56">
@@ -58,7 +59,7 @@
         </div>
       </div>
       <button type="button" class="mt-3 flex w-full items-center gap-2.5 rounded-md border border-line px-2.5 py-2 text-left text-sm text-fg-muted transition-colors hover:border-line-strong hover:bg-surface-hover hover:text-fg" title="Switch instance" onclick={() => { close(); window.dispatchEvent(new CustomEvent('omp-control:show-instance-picker')); }}>
-        <Server size={14} class={dashboard.connected ? "shrink-0 text-success" : "shrink-0 text-danger"} />
+        <Server size={14} class={['shrink-0', isChecking ? 'text-fg-faint' : instanceStatus === 'online' ? 'text-success' : instanceStatus === 'offline' ? 'text-danger' : instanceStatus === 'degraded' ? 'text-warning' : 'text-fg-faint']} />
         <span class="min-w-0 flex-1 truncate">{instanceName}</span>
         <ArrowLeftRight size={14} class="shrink-0 text-fg-subtle" />
       </button>

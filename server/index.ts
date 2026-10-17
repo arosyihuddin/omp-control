@@ -109,6 +109,29 @@ async function checkHealth(id: string) {
   }
 }
 
+async function testConnection(baseUrlValue: unknown, credentialValue: unknown) {
+  const started = performance.now();
+  const checkedAt = new Date().toISOString();
+  try {
+    const credential = typeof credentialValue === "string" ? credentialValue.trim() : "";
+    if (!credential) throw new Error("Bearer token is required");
+    if (credential.length > 4096) throw new Error("credential is too long");
+    const url = validateBaseUrl(baseUrlValue);
+    url.pathname = (url.pathname + "/api/dashboard").replace(/\/+/g, "/");
+    const response = await fetch(url, {
+      headers: { accept: "application/json", authorization: "Bearer " + credential },
+      signal: AbortSignal.timeout(5000),
+      redirect: "error",
+    });
+    if (!response.ok) throw new Error("Runtime returned HTTP " + response.status);
+    if (!(response.headers.get("content-type") ?? "").includes("application/json")) throw new Error("Runtime did not return a JSON dashboard response");
+    await response.json();
+    return send({ status: "online", checkedAt, latencyMs: Math.round(performance.now() - started) });
+  } catch (e) {
+    return fail("CONNECTION_FAILED", e instanceof Error ? e.message : "Connection test failed", 502);
+  }
+}
+
 function runtimeRouteAllowed(path: string, method: string): boolean {
   const exact: Record<string, string[]> = {
     "/api/root-commands": ["GET", "PUT"],
@@ -322,10 +345,14 @@ export async function handleControlRequest(req: Request, server?: any): Promise<
     if (url.pathname === "/control/v1/instances" && req.method === "POST") {
       const body = await readJson(req), name = safeName(body.name);
       const baseUrl = validateBaseUrl(body.baseUrl).toString().replace(/\/$/, "");
-      const credential = typeof body.credential === "string" && body.credential.trim() ? body.credential.trim() : null;
-      if (credential && credential.length > 4096) throw new Error("credential is too long");
-      const now = new Date().toISOString(), id = randomUUID();
-      db.query("INSERT INTO instances (id,name,base_url,credential,status,created_at,updated_at) VALUES (?,?,?,?,'unknown',?,?)").run(id, name, baseUrl, credential, now, now);
+      const credential = typeof body.credential === "string" ? body.credential.trim() : "";
+      if (!credential) throw new Error("credential is required");
+      if (credential.length > 4096) throw new Error("credential is too long");
+      const tested = await testConnection(baseUrl, credential);
+      if (!tested.ok) return tested;
+      const { checkedAt } = await tested.json() as { checkedAt: string };
+      const id = randomUUID();
+      db.query("INSERT INTO instances (id,name,base_url,credential,status,last_seen_at,created_at,updated_at) VALUES (?,?,?,?,'online',?,?,?)").run(id, name, baseUrl, credential, checkedAt, checkedAt, checkedAt);
       return send({ instance: publicInstance(getRow(id) as Row) }, 201);
     }
     const match = url.pathname.match(/^\/control\/v1\/instances\/([^/]+)(?:\/(health-check))?$/);

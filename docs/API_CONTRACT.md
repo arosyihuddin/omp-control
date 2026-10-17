@@ -39,9 +39,13 @@ Response 200: object containing instances array.
 ### Register instance
 POST /control/v1/instances
 
-Request fields: name, baseUrl, credential (write-only secret).
+Request fields: name, baseUrl, credential (required write-only secret).
 
-Response 201: object containing instance. The credential must never be echoed.
+Before persistence, the control plane requests the remote `/api/dashboard` endpoint with the supplied Bearer token and a 5-second timeout. Only a successful JSON response is accepted.
+
+Response 201: object containing an `online` instance with `lastSeenAt` set. The credential must never be echoed.
+
+If the connection test fails, the request returns `502 CONNECTION_FAILED` and no instance is created.
 
 Validation requirements:
 - HTTPS required by default; permit HTTP only for explicit loopback/private-network development configuration.

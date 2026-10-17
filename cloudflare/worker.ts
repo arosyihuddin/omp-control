@@ -187,6 +187,29 @@ function safeName(value: unknown) {
     throw new Error("name must contain 1–80 characters");
   return value.trim();
 }
+
+async function testConnection(baseUrlValue: unknown, credentialValue: unknown) {
+  const started = Date.now();
+  const checkedAt = now();
+  try {
+    const credential = typeof credentialValue === "string" ? credentialValue.trim() : "";
+    if (!credential) throw new Error("Bearer token is required");
+    if (credential.length > 4096) throw new Error("credential is too long");
+    const target = validateBase(baseUrlValue);
+    target.pathname = (target.pathname + "/api/dashboard").replace(/\/+/g, "/");
+    const response = await fetch(target, {
+      headers: { accept: "application/json", authorization: "Bearer " + credential },
+      signal: AbortSignal.timeout(5000),
+      redirect: "manual",
+    });
+    if (!response.ok) throw new Error("Runtime returned HTTP " + response.status);
+    if (!(response.headers.get("content-type") ?? "").includes("application/json")) throw new Error("Runtime did not return a JSON dashboard response");
+    await response.json();
+    return json({ status: "online", checkedAt, latencyMs: Date.now() - started });
+  } catch (e) {
+    return fail("CONNECTION_FAILED", e instanceof Error ? e.message : "Connection test failed", 502);
+  }
+}
 function pub(r: InstanceRow) {
   return {
     id: r.id,
@@ -515,6 +538,7 @@ async function handle(req: Request, env: Env): Promise<Response> {
         return websocketProxy(req, env, id, url);
       return proxy(req, env, id, runtime[2], url);
     }
+
     if (path === "/control/v1/instances" && req.method === "GET") {
       const { results = [] } = await env.DB.prepare(
         "SELECT id,name,base_url,status,version,last_seen_at,created_at,updated_at FROM instances ORDER BY created_at DESC",
@@ -525,23 +549,19 @@ async function handle(req: Request, env: Env): Promise<Response> {
       const b = await body(req),
         name = safeName(b.name),
         base = validateBase(b.baseUrl).toString().replace(/\/$/, ""),
-        credential =
-          typeof b.credential === "string" && b.credential.trim()
-            ? b.credential.trim()
-            : null;
-      if (credential && credential.length > 4096)
-        throw new Error("credential is too long");
-      const id = uuid(),
-        t = now();
+        credential = typeof b.credential === "string" ? b.credential.trim() : "";
+      if (!credential) throw new Error("credential is required");
+      if (credential.length > 4096) throw new Error("credential is too long");
+      const tested = await testConnection(base, credential);
+      if (!tested.ok) return tested;
+      const { checkedAt } = await tested.json() as { checkedAt: string };
+      const id = uuid();
       await env.DB.prepare(
-        "INSERT INTO instances (id,name,base_url,credential,status,created_at,updated_at) VALUES (?,?,?,?,'unknown',?,?)",
+        "INSERT INTO instances (id,name,base_url,credential,status,last_seen_at,created_at,updated_at) VALUES (?,?,?,?,'online',?,?,?)",
       )
-        .bind(id, name, base, credential, t, t)
+        .bind(id, name, base, credential, checkedAt, checkedAt, checkedAt)
         .run();
-      return json(
-        { instance: pub((await instance(env, id)) as InstanceRow) },
-        201,
-      );
+      return json({ instance: pub((await instance(env, id)) as InstanceRow) }, 201);
     }
     const match = path.match(
       /^\/control\/v1\/instances\/([^/]+)(?:\/(health-check))?$/,

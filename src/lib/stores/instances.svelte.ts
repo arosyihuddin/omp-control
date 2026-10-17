@@ -1,10 +1,12 @@
-import { instancesApi, type Instance } from "$lib/api/instances";
+import { instancesApi, type HealthResult, type Instance } from "$lib/api/instances";
 import { setStoredActiveInstance } from "$lib/api/runtime-url";
 
 class InstanceRegistry {
   items = $state<Instance[]>([]);
   loading = $state(false);
   activeId = $state<string | null>(null);
+  checkingIds = $state<string[]>([]);
+  private healthChecks = new Map<string, Promise<HealthResult>>();
   error = $state("");
 
   get active(): Instance | undefined {
@@ -26,6 +28,38 @@ class InstanceRegistry {
     } finally {
       this.loading = false;
     }
+  }
+  async checkHealth(id: string): Promise<HealthResult> {
+    const pending = this.healthChecks.get(id);
+    if (pending) return pending;
+
+    this.checkingIds = [...this.checkingIds, id];
+    const request = instancesApi.health(id)
+      .then((result) => {
+        this.items = this.items.map((item) => item.id === id
+          ? {
+              ...item,
+              status: result.status,
+              ...(result.status === "online" ? { lastSeenAt: result.checkedAt } : {}),
+              updatedAt: result.checkedAt,
+            }
+          : item);
+        return result;
+      })
+      .catch((error) => {
+        this.items = this.items.map((item) => item.id === id ? { ...item, status: "unknown" } : item);
+        throw error;
+      })
+      .finally(() => {
+        this.healthChecks.delete(id);
+        this.checkingIds = this.checkingIds.filter((checkingId) => checkingId !== id);
+      });
+    this.healthChecks.set(id, request);
+    return request;
+  }
+
+  async checkAllHealth(): Promise<void> {
+    await Promise.allSettled(this.items.map((item) => this.checkHealth(item.id)));
   }
 
   setActive(id: string | null) {
