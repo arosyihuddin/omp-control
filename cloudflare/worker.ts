@@ -218,6 +218,7 @@ const exact: Record<string, string[]> = {
   "/api/terminals": ["GET", "POST"],
   "/api/tools": ["GET"],
   "/api/root-commands": ["GET", "PUT"],
+  "/api/root-commands/password": ["PUT"],
   "/api/logs": ["GET"],
   "/api/approvals": ["GET"],
   "/api/approvals/clear": ["POST"],

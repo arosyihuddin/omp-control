@@ -15,7 +15,8 @@
     { value: 'grid', icon: LayoutGrid, iconClass: 'text-accent-hover', ariaLabel: 'Grid view' },
   ];
 
-  const segments = $derived(browser.path === '.' ? [] : browser.path.split('/').filter(Boolean));
+  const absolute = $derived(browser.path.startsWith('/'));
+  const segments = $derived(browser.path === '.' || browser.path === '/' ? [] : browser.path.split('/').filter(Boolean));
 </script>
 
 <div class="flex flex-wrap items-center gap-2">
@@ -26,16 +27,16 @@
       aria-label="Current folder"
       class="flex h-8 min-w-0 flex-1 items-center gap-0.5 overflow-x-auto rounded-md border border-line bg-surface px-1 font-mono text-sm text-fg-muted"
     >
-      <button type="button" class="flex h-6 shrink-0 items-center gap-1 rounded px-1.5 leading-none hover:bg-surface-hover hover:text-fg" onclick={() => browser.navigate('.')}>
+      <button type="button" class="flex h-6 shrink-0 items-center gap-1 rounded px-1.5 leading-none hover:bg-surface-hover hover:text-fg" onclick={() => browser.navigate(absolute ? '/' : '.')}>
         <Home size={12} class="block shrink-0" />
-        <span class="relative top-px inline-flex items-center leading-none">/home</span>
+        <span class="relative top-px inline-flex items-center leading-none">{absolute ? '/' : '/home'}</span>
       </button>
       {#each segments as segment, index (index)}
         <span class="text-fg-faint">/</span>
         <button
           type="button"
           class="flex h-6 shrink-0 items-center rounded px-1.5 leading-none hover:bg-surface-hover hover:text-fg"
-          onclick={() => browser.navigate(segments.slice(0, index + 1).join('/'))}
+          onclick={() => browser.navigate(absolute ? '/' + segments.slice(0, index + 1).join('/') : segments.slice(0, index + 1).join('/'))}
         >
           {segment}
         </button>

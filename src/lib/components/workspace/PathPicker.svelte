@@ -36,9 +36,10 @@
   const heading = $derived(title ?? (mode === 'file' ? 'Open File' : 'Open Folder'));
   const action = $derived(confirmLabel ?? 'Open');
 
+  const absolute = $derived(current.startsWith('/'));
   const crumbs = $derived.by(() => {
-    const parts = current === '.' ? [] : current.split('/').filter(Boolean);
-    return parts.map((name, index) => ({ name, path: parts.slice(0, index + 1).join('/') }));
+    const parts = current === '.' || current === '/' ? [] : current.split('/').filter(Boolean);
+    return parts.map((name, index) => ({ name, path: absolute ? '/' + parts.slice(0, index + 1).join('/') : parts.slice(0, index + 1).join('/') }));
   });
 
   const visible = $derived.by(() => {
@@ -128,10 +129,11 @@
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <div class="flex h-[min(60vh,480px)] flex-col" role="group" aria-label="Folder picker keyboard navigation" onkeydown={onListKeydown}>
     <div class="flex items-center gap-2 border-b border-line px-3 py-2">
-      <IconButton label="Up one level" size="sm" disabled={current === '.'} onclick={() => load(dirname(current))}>
+      <IconButton label="Up one level" size="sm" disabled={current === '.' || current === '/'} onclick={() => load(dirname(current))}>
         <ArrowUp size={15} />
       </IconButton>
       <nav class="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto text-sm" aria-label="Path">
+        <button type="button" class="flex h-6 shrink-0 items-center gap-1 rounded px-1.5 text-fg-muted hover:bg-surface-hover hover:text-fg" onclick={() => load('/') }><Home size={13} /> /</button>
         <button
           type="button"
           class="flex h-6 shrink-0 items-center gap-1 rounded px-1.5 text-fg-muted hover:bg-surface-hover hover:text-fg"

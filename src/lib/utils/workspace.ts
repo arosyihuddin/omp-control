@@ -14,9 +14,13 @@ export function previewKindFor(name: string): PreviewKind | null {
 
 export const isPreviewable = (name: string) => previewKindFor(name) !== null;
 
-/** Workspace paths are relative to the home directory; "." is the root. */
-export const joinPath = (base: string, name: string) => (base === '.' ? name : `${base}/${name}`);
+/** Relative paths are home-scoped; absolute paths address the filesystem root. */
+export const joinPath = (base: string, name: string) => base === '.' ? name : base === '/' ? `/${name}` : `${base}/${name}`;
 export const basename = (path: string) => path.split('/').filter(Boolean).at(-1) ?? path;
-export const dirname = (path: string) => path.split('/').slice(0, -1).join('/') || '.';
-export const displayPath = (path: string) => (path === '.' ? '/home' : `/home/${path}`);
+export const dirname = (path: string) => {
+  if (path === '/') return '/';
+  const parent = path.split('/').slice(0, -1).join('/');
+  return parent || (path.startsWith('/') ? '/' : '.');
+};
+export const displayPath = (path: string) => path.startsWith('/') ? path : path === '.' ? '/home' : `/home/${path}`;
 export const isHidden = (name: string) => name.startsWith('.');

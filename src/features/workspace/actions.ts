@@ -77,7 +77,7 @@ export function openPath(path: string, name: string, type: WorkspaceItem['type']
 }
 
 /** `~/path` — the form shown to users for a workspace path. */
-export const homePath = (path: string) => (path === '.' ? '~' : `~/${path}`);
+export const homePath = (path: string) => path.startsWith('/') ? path : path === '.' ? '~' : `~/${path}`;
 
 export async function copyText(text: string) {
   try {

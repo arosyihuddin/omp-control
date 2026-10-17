@@ -27,6 +27,11 @@
   </div>
   <ul class="space-y-0.5">
     <li>
+      <button type="button" class={['flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-base transition-colors hover:bg-surface-hover hover:text-fg', browser.path === '/' ? 'bg-surface-active text-fg' : 'text-fg-subtle']} onclick={() => browser.navigate('/')}>
+        <Home size={14} class="shrink-0" /> /
+      </button>
+    </li>
+    <li>
       <button
         type="button"
         class={[
@@ -74,7 +79,7 @@
 
 <!-- Below `lg` the sidebar is hidden, so Home + pinned folders become a compact strip. -->
 <nav aria-label="Places" class="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 lg:hidden">
-  {#each [{ path: '.', name: 'Home' }, ...prefs.pins] as place (place.path)}
+  {#each [{ path: '/', name: '/' }, { path: '.', name: 'Home' }, ...prefs.pins] as place (place.path)}
     <button
       type="button"
       class={[
@@ -83,7 +88,7 @@
       ]}
       onclick={() => browser.navigate(place.path)}
     >
-      {#if place.path === '.'}<Home size={13} class="shrink-0" />{:else}<FileIcon item={{ name: place.name, type: 'directory' }} size={13} />{/if}
+      {#if place.path === '.' || place.path === '/'}<Home size={13} class="shrink-0" />{:else}<FileIcon item={{ name: place.name, type: 'directory' }} size={13} />{/if}
       {place.name}
     </button>
   {/each}

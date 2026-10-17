@@ -112,6 +112,7 @@ async function checkHealth(id: string) {
 function runtimeRouteAllowed(path: string, method: string): boolean {
   const exact: Record<string, string[]> = {
     "/api/root-commands": ["GET", "PUT"],
+    "/api/root-commands/password": ["PUT"],
     "/api/dashboard": ["GET"],
     "/api/events": ["GET"],
     "/api/tunnels": ["GET", "POST"],

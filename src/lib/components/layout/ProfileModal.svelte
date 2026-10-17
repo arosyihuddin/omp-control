@@ -1,13 +1,14 @@
 <script lang="ts">
-  import { Check, Code2, Keyboard, LockKeyhole, Moon, Network, Settings2, Sun, UserRound } from '@lucide/svelte';
+  import { Check, Code2, Keyboard, LockKeyhole, Moon, Network, Settings2, Sun, UserRound, KeyRound, Eye, EyeOff } from '@lucide/svelte';
   import { Avatar, Button, Input, Modal } from '$lib/components/ui';
   import { profile } from '$lib/stores/profile.svelte';
   import { theme } from '$lib/stores/theme.svelte';
+  import { rootCommandsApi, type RootCommandConfig } from '$lib/api';
   import InstancesManager from './InstancesManager.svelte';
 
-  interface Props { open: boolean; onclose: () => void; initialSection?: 'profile' | 'general' | 'editor' | 'instances'; }
+  interface Props { open: boolean; onclose: () => void; initialSection?: 'profile' | 'general' | 'editor' | 'instances' | 'sudo'; }
   let { open, onclose, initialSection = 'profile' }: Props = $props();
-  type Section = 'profile' | 'general' | 'editor' | 'instances';
+  type Section = 'profile' | 'general' | 'editor' | 'instances' | 'sudo';
   let section = $state<Section>('profile');
   const colors = [
     { key: 'accent', swatch: 'bg-accent', label: 'Indigo' },
@@ -21,6 +22,33 @@
   let avatarColor = $state('accent');
   let error = $state('');
   let saving = $state(false);
+  let sudoConfig = $state<RootCommandConfig | null>(null);
+  let sudoPassword = $state('');
+  let sudoLoading = $state(false);
+  let sudoSaving = $state(false);
+  let sudoError = $state('');
+  let sudoSaved = $state(false);
+  let showSudoPassword = $state(false);
+  async function loadSudoConfig() {
+    sudoLoading = true; sudoError = '';
+    try { sudoConfig = await rootCommandsApi.get(); }
+    catch (cause) { sudoError = cause instanceof Error ? cause.message : 'Gagal memuat konfigurasi sudo.'; }
+    finally { sudoLoading = false; }
+  }
+  async function saveSudoPassword() {
+    if (!sudoPassword || sudoSaving) return;
+    sudoSaving = true; sudoError = ''; sudoSaved = false;
+    try { sudoConfig = await rootCommandsApi.savePassword({ password: sudoPassword }); sudoPassword = ''; sudoSaved = true; }
+    catch (cause) { sudoError = cause instanceof Error ? cause.message : 'Gagal menyimpan password sudo.'; }
+    finally { sudoSaving = false; }
+  }
+  async function clearSudoPassword() {
+    if (sudoSaving || !sudoConfig?.passwordConfigured) return;
+    sudoSaving = true; sudoError = ''; sudoSaved = false;
+    try { sudoConfig = await rootCommandsApi.savePassword({ clearPassword: true }); sudoPassword = ''; sudoSaved = true; }
+    catch (cause) { sudoError = cause instanceof Error ? cause.message : 'Gagal menghapus password sudo.'; }
+    finally { sudoSaving = false; }
+  }
   $effect(() => {
     if (!open) return;
     section = initialSection;
@@ -42,7 +70,9 @@
     { id: 'general' as const, label: 'Umum', icon: Settings2 },
     { id: 'editor' as const, label: 'Editor', icon: Code2 },
     { id: 'instances' as const, label: 'Instances', icon: Network },
+    { id: 'sudo' as const, label: 'Sudo', icon: KeyRound },
   ];
+  $effect(() => { if (open && section === 'sudo') void loadSudoConfig(); });
   const shortcuts = [
     { action: 'Save file', keys: ['Ctrl / ⌘', 'S'] },
     { action: 'Save all files', keys: ['Ctrl / ⌘', 'Shift', 'S'] },
@@ -110,6 +140,18 @@
             {/each}
           </div>
           <p class="mt-2 text-xs text-fg-faint">Some shortcuts work only when the editor or a file item has focus.</p>
+        </div>
+      {:else if section === 'sudo'}
+        <div class="mb-5"><h4 class="text-sm font-semibold">Sudo & akses root</h4><p class="mt-1 text-xs text-fg-subtle">Password disimpan terenkripsi oleh instance OMP-MCP yang sedang dipilih. Password tidak pernah ditampilkan kembali.</p></div>
+        <div class="space-y-4 border-t border-line pt-4">
+          <div class="flex items-start gap-3"><LockKeyhole size={17} class="mt-0.5 shrink-0 text-fg-subtle"/><div class="min-w-0 flex-1"><p class="text-sm font-medium">Password sudo instance</p><p class="mt-1 text-xs leading-5 text-fg-subtle">Konfigurasi ini khusus untuk <strong>{'instance yang sedang aktif'}</strong>. Ganti instance untuk mengelola password server lain.</p></div></div>
+          {#if sudoLoading}<p class="text-sm text-fg-subtle">Memuat status sudo…</p>{:else if sudoConfig}
+            <div class="rounded-lg border border-line bg-surface px-3 py-3"><div class="flex items-center justify-between gap-3"><span class="text-sm text-fg-muted">Password tersimpan</span><span class={['rounded-md border px-2 py-1 text-xs', sudoConfig.passwordConfigured ? 'border-success/30 bg-success/10 text-success' : 'border-line text-fg-subtle']}>{sudoConfig.passwordConfigured ? 'Terkonfigurasi' : 'Belum diatur'}</span></div><div class="mt-2 flex items-center justify-between gap-3"><span class="text-sm text-fg-muted">Kunci enkripsi backend</span><span class={['rounded-md border px-2 py-1 text-xs', sudoConfig.encryptionConfigured ? 'border-success/30 bg-success/10 text-success' : 'border-warning/30 bg-warning/10 text-warning']}>{sudoConfig.encryptionConfigured ? 'Siap' : 'Belum dikonfigurasi'}</span></div></div>
+            {#if !sudoConfig.encryptionConfigured}<p class="text-sm text-warning">Atur <code>OMP_SUDO_ENCRYPTION_KEY</code> (minimal 32 karakter) di environment instance OMP-MCP dan restart servicenya sebelum menyimpan password.</p>{/if}
+          {/if}
+          <label class="block space-y-1.5 text-sm text-fg"><span class="font-medium">{sudoConfig?.passwordConfigured ? 'Password sudo baru' : 'Password sudo'}</span><div class="relative"><input type={showSudoPassword ? 'text' : 'password'} bind:value={sudoPassword} autocomplete="new-password" placeholder="Masukkan password sudo" class="w-full rounded-md border border-line bg-surface px-3 py-2 pr-10 text-sm text-fg outline-none focus:border-accent" onkeydown={(event) => event.key === 'Enter' && void saveSudoPassword()} /><button type="button" class="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-fg-subtle hover:text-fg" aria-label={showSudoPassword ? 'Sembunyikan password' : 'Tampilkan password'} onclick={() => showSudoPassword = !showSudoPassword}>{#if showSudoPassword}<EyeOff size={15}/>{:else}<Eye size={15}/>{/if}</button></div></label>
+          {#if sudoError}<p class="text-sm text-danger" role="alert">{sudoError}</p>{/if}{#if sudoSaved}<p class="text-sm text-success" role="status">Konfigurasi password sudo berhasil diperbarui.</p>{/if}
+          <div class="flex flex-wrap gap-2"><Button size="sm" variant="primary" disabled={!sudoPassword || sudoSaving || sudoLoading || !sudoConfig?.encryptionConfigured} onclick={() => void saveSudoPassword()}>{sudoSaving ? 'Menyimpan…' : 'Simpan password'}</Button>{#if sudoConfig?.passwordConfigured}<Button size="sm" variant="secondary" disabled={sudoSaving} onclick={() => void clearSudoPassword()}>Hapus password</Button>{/if}<Button size="sm" variant="secondary" disabled={sudoLoading || sudoSaving} onclick={() => void loadSudoConfig()}>Muat ulang</Button></div>
         </div>
       {:else}
         <InstancesManager onenter={onclose} />

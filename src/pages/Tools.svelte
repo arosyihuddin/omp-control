@@ -75,7 +75,6 @@
   let rootRules = $state<
     { command: string; argsText: string; enabled: boolean }[]
   >([]);
-  let rootPassword = $state("");
   let rootLoading = $state(false);
   let rootSaving = $state(false);
   let rootError = $state("");
@@ -116,9 +115,7 @@
       });
       rootConfig = await rootCommandsApi.save({
         rules,
-        ...(rootPassword ? { password: rootPassword } : {}),
       });
-      rootPassword = "";
       rootSaved = true;
     } catch (error) {
       rootError =
@@ -638,24 +635,12 @@
                 diizinkan untuk dijalankan sebagai root.
               </p>{/if}
           </div>
-          <label class="block max-w-xl space-y-1.5 text-sm text-fg"
-            ><span
-              >Password sudo {rootConfig?.passwordConfigured
-                ? "(isi hanya jika ingin mengganti)"
-                : ""}</span
-            ><input
-              type="password"
-              bind:value={rootPassword}
-              autocomplete="new-password"
-              placeholder="Password tidak akan ditampilkan kembali"
-              class="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg outline-none focus:border-accent"
-            /></label
-          >
+          <p class="text-sm text-fg-subtle">Password sudo dikelola melalui <strong>Settings → Sudo</strong>. Whitelist perintah root tetap diatur di sini.</p>
           {#if rootError}<p class="text-sm text-danger" role="alert">
               {rootError}
             </p>{/if}
           {#if rootSaved}<p class="text-sm text-success" role="status">
-              Whitelist sudo berhasil disimpan untuk instance ini.
+              Whitelist perintah root berhasil disimpan untuk instance ini.
             </p>{/if}
           <div class="flex flex-wrap items-center gap-2">
             <button

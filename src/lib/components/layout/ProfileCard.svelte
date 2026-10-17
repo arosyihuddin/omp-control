@@ -15,7 +15,7 @@
   let { collapsed = false, placement = 'top', compact = false }: Props = $props();
 
   let settingsOpen = $state(false);
-  let settingsSection = $state<'profile' | 'general' | 'editor' | 'instances'>('profile');
+  let settingsSection = $state<'profile' | 'general' | 'editor' | 'instances' | 'sudo'>('profile');
 
   const name = $derived(profile.data?.displayName ?? 'Profile');
   const instanceName = $derived(instanceRegistry.active?.name ?? 'No instance selected');

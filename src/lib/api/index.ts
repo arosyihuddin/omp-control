@@ -88,6 +88,8 @@ export const rootCommandsApi = {
   get: () => request<RootCommandConfig>("/api/root-commands"),
   save: (body: { rules: RootCommandRule[]; password?: string; clearPassword?: boolean }) =>
     request<RootCommandConfig>("/api/root-commands", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
+  savePassword: (body: { password?: string; clearPassword?: boolean }) =>
+    request<RootCommandConfig>("/api/root-commands/password", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
 };
 
 export const approvalsApi = {
