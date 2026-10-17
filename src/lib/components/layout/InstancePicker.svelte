@@ -152,7 +152,7 @@
       </button>
       </div>
       {#if accountOpen}
-        <div class="absolute right-0 top-full z-20 mt-2 w-44 rounded-xl border border-line bg-surface p-1.5 shadow-xl">
+        <div class="absolute right-0 top-full z-20 mt-2 w-44 rounded-xl border border-line bg-surface-raised p-1.5 shadow-pop">
           <button type="button" class="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm text-fg-subtle transition hover:bg-surface-hover hover:text-fg" onclick={() => { accountOpen = false; settingsOpen = true; }}>
             <Settings2 size={15}/> Settings
           </button>
@@ -187,17 +187,17 @@
     {:else}
       <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {#each instanceRegistry.items as instance (instance.id)}
-          <div class="group relative flex min-h-44 flex-col overflow-visible rounded-2xl border border-line bg-surface p-5 text-left transition duration-200 hover:-translate-y-1 hover:border-accent/50 hover:bg-surface-hover">
+          <div class="group isolate relative flex min-h-44 flex-col overflow-visible rounded-2xl border border-line bg-surface p-5 text-left transition duration-200 hover:-translate-y-1 hover:border-accent/50 hover:bg-surface-hover">
             <button type="button" aria-label={'Open ' + instance.name} class="absolute inset-0 z-0 rounded-2xl focus:outline-none focus:ring-2 focus:ring-accent" onclick={() => select(instance)}></button>
             <div class="pointer-events-none absolute inset-x-0 top-0 h-1 rounded-t-2xl bg-gradient-to-r from-[#412d15] via-[#e1dcc9]/80 to-transparent opacity-60 transition group-hover:opacity-100"></div>
-            <div class="relative z-10 flex items-start justify-between gap-3">
+            <div class="relative z-[80] flex items-start justify-between gap-3">
               <div class="flex h-12 w-12 items-center justify-center rounded-xl border border-line bg-surface-hover"><Server size={21} class="text-accent"/></div>
               <div class="flex items-center gap-2">
                 {#if instanceRegistry.activeId === instance.id}<span class="flex items-center gap-1 rounded-full bg-emerald-400/10 px-2 py-1 text-[11px] text-emerald-600 dark:text-emerald-300"><Check size={12}/> Active</span>{/if}
-                <div class="relative">
-                  <button type="button" class="flex h-8 w-8 items-center justify-center rounded-md text-fg-subtle transition hover:bg-surface-hover hover:text-fg" aria-label={'Actions for ' + instance.name} title="Instance actions" aria-expanded={openMenuId === instance.id} onclick={(event) => { event.stopPropagation(); openMenuId = openMenuId === instance.id ? null : instance.id; }}><EllipsisVertical size={17}/></button>
-                  {#if openMenuId === instance.id}
-                    <div class="absolute right-0 top-full z-30 mt-1 w-44 rounded-xl border border-line bg-surface p-1.5 shadow-xl">
+                <div class="relative z-[60]">
+                   <button type="button" class="flex h-8 w-8 items-center justify-center rounded-md text-fg-subtle transition hover:bg-surface-hover hover:text-fg" aria-label={'Actions for ' + instance.name} title="Instance actions" aria-expanded={openMenuId === instance.id} onclick={(event) => { event.stopPropagation(); openMenuId = openMenuId === instance.id ? null : instance.id; }}><EllipsisVertical size={17}/></button>
+                   {#if openMenuId === instance.id}
+                    <div class="absolute right-0 top-full z-[90] mt-1 w-44 rounded-xl border border-line bg-surface-raised p-1.5 shadow-pop" style="background-color: rgb(var(--c-surface-raised) / 1);">
                       <button type="button" disabled={checkingHealth === instance.id} class="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm text-fg-subtle transition hover:bg-surface-hover hover:text-fg disabled:opacity-50" onclick={(event) => { event.stopPropagation(); void checkHealth(instance); }}><Activity size={15}/>{checkingHealth === instance.id ? 'Checking health…' : 'Check health'}</button>
                       <button type="button" class="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm text-fg-subtle transition hover:bg-surface-hover hover:text-fg" onclick={(event) => { event.stopPropagation(); openEdit(instance); }}><Pencil size={15}/> Edit instance</button>
                       <button type="button" class="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm text-danger transition hover:bg-danger/10" onclick={(event) => { event.stopPropagation(); void removeInstance(instance); }}><Trash2 size={15}/> Remove instance</button>
