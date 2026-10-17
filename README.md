@@ -48,17 +48,23 @@ OMP Control supports two deployment modes:
    bun run cf:setup
    ~~~
 
-3. Build and deploy. This command also verifies the D1 binding and applies any pending migrations on subsequent deployments:
+3. Build the Cloudflare target and apply remote D1 migrations:
 
    ~~~bash
-   bun run cf:deploy
+   bun run cf:build && bun run cf:migrate:remote
+   ~~~
+
+4. Deploy the Worker while preserving the environment variables already configured in Cloudflare:
+
+   ~~~bash
+   npx wrangler deploy --keep-vars
    ~~~
 
 The setup script will not overwrite a configured database ID or silently create a replacement database if the configured database is missing from the authenticated Cloudflare account. Check the Wrangler account/profile if validation fails.
 
 After deployment, open the Worker URL and create the first administrator account in the setup screen.
 
-For local Worker emulation, run `bun run cf:migrate:local` once, then `bun run cf:dev`. The `cf:dev` and `cf:deploy` scripts build the static Cloudflare target automatically; the normal `build` script creates the standalone Bun server instead.
+For local Worker emulation, run `bun run cf:migrate:local` once, then `bun run cf:dev`. The `cf:dev` script builds the static Cloudflare target automatically; `cf:build` builds it explicitly, while the normal `build` script creates the standalone Bun server instead.
 
 **Cloudflare-mode differences:** OMP instances must be reachable from Cloudflare over HTTPS. The browser terminal WebSocket proxy is intended for instances without bearer credentials; authenticated WebSocket proxying remains unsupported. The local `cloudflared` process manager cannot run inside Workers, so tunnel creation and process controls are disabled in this mode and must be managed separately. The self-hosted Bun mode is unchanged.
 
