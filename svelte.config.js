@@ -5,6 +5,7 @@ const cloudflare = process.env.OMP_CONTROL_TARGET === 'cloudflare';
 
 export default {
   kit: {
+    files: { assets: 'public' },
     // Cloudflare serves the SPA from nested routes too; root-relative assets avoid
     // resolving `./_app/...` under routes such as `/workspace/`.
     paths: { relative: !cloudflare },
