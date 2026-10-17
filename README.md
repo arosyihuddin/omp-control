@@ -81,12 +81,22 @@ The Tools page reads `GET /api/tools` from the selected OMP-MCP runtime through 
 Registry endpoints:
 
 - GET /control/v1/instances
-- POST /control/v1/instances with name, baseUrl, and optional write-only credential
+- POST /control/v1/instances with name, baseUrl, and required write-only Bearer credential; the runtime connection is tested before persistence.
 - GET, PATCH, or DELETE /control/v1/instances/:id
 - POST /control/v1/instances/:id/health-check
 - GET /healthz
 
 Base URLs must be HTTP(S), must not contain embedded credentials/query/fragment, and must use HTTPS except for loopback development instances. Health checks use a 4-second timeout and do not follow redirects. Terminal WebSocket forwarding works for instances without a bearer credential; authenticated WebSocket proxying remains pending.
+
+## 📦 Releases
+
+Releases use Semantic Versioning and annotated Git tags. The `release` target validates the source, checks Svelte and TypeScript, builds the Cloudflare Worker target, updates `package.json`, creates a `vX.Y.Z` tag, and pushes the release commit and tag to `origin`.
+
+```bash
+make release VERSION=0.2.0
+```
+
+Run releases from a clean `main` branch. Use PATCH for backward-compatible fixes, MINOR for backward-compatible features, and MAJOR for breaking changes.
 
 ## Documentation
 
