@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Activity, Check, CircleAlert, EllipsisVertical, Pencil, Plus, Server, Trash2, X, ArrowLeftRight } from "@lucide/svelte";
+  import { Activity, Check, CircleAlert, EllipsisVertical, Eye, EyeOff, Pencil, Plus, Server, Trash2, X, ArrowLeftRight } from "@lucide/svelte";
   import { ConfirmDialog, Menu, MenuItem, Modal, Skeleton } from "$lib/components/ui";
   import { instancesApi, type Instance, type InstanceStatus } from "$lib/api/instances";
   import { instanceRegistry } from "$lib/stores/instances.svelte";
@@ -12,6 +12,7 @@
   let editing = $state<Instance | null>(null);
   let error = $state("");
   let name = $state(""), baseUrl = $state("http://127.0.0.1:48766"), credential = $state("");
+  let credentialVisible = $state(false);
   let checking = $state<string | null>(null), deleting = $state<string | null>(null);
   let pendingDelete = $state<Instance | null>(null);
 
@@ -153,7 +154,7 @@
   <form id="settings-instance-form" class="space-y-4 px-4 py-4" onsubmit={(event) => { event.preventDefault(); void saveInstance(); }}>
     <label class="block space-y-1.5 text-sm"><span class="text-fg-subtle">Display name</span><input required maxlength="80" bind:value={name} placeholder="Production server" class="h-10 w-full rounded-lg border border-line bg-canvas px-3 outline-none focus:border-accent"/></label>
     <label class="block space-y-1.5 text-sm"><span class="text-fg-subtle">Base URL</span><input required type="url" bind:value={baseUrl} placeholder="https://omp.example.com" class="h-10 w-full rounded-lg border border-line bg-canvas px-3 outline-none focus:border-accent"/><span class="block text-xs text-fg-faint">Use HTTPS except for localhost development instances.</span></label>
-    <label class="block space-y-1.5 text-sm"><span class="text-fg-subtle">Bearer token{editing ? "" : ""}</span><input type="password" autocomplete="new-password" required={!editing} bind:value={credential} placeholder={editing ? "Leave blank to keep current token" : "Paste OMP_API_TOKEN from server setup"} class="h-10 w-full rounded-lg border border-line bg-canvas px-3 outline-none focus:border-accent"/><span class="block text-xs text-fg-faint">{editing ? "Leave blank to keep the current token." : "Required. Use the token generated during OMP-MCP setup."}</span></label>
+    <label class="block space-y-1.5 text-sm"><span class="text-fg-subtle">Bearer token{editing ? "" : ""}</span><div class="relative"><input type={credentialVisible ? "text" : "password"} autocomplete="new-password" required={!editing} bind:value={credential} placeholder={editing ? "Leave blank to keep current token" : "Paste OMP_API_TOKEN from server setup"} class="h-10 w-full rounded-lg border border-line bg-canvas px-3 pr-10 outline-none focus:border-accent"/><button type="button" class="absolute inset-y-0 right-0 inline-flex w-10 items-center justify-center text-fg-subtle hover:text-fg" aria-label={credentialVisible ? "Hide bearer token" : "Show bearer token"} title={credentialVisible ? "Hide token" : "Show token"} onclick={() => (credentialVisible = !credentialVisible)}>{#if credentialVisible}<EyeOff size={16}/>{:else}<Eye size={16}/>{/if}</button></div><span class="block text-xs text-fg-faint">{editing ? "Leave blank to keep the current token." : "Required. Use the token generated during OMP-MCP setup."}</span></label>
     {#if error}<div role="alert" class="flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/5 p-3 text-sm text-red-500"><CircleAlert size={16} class="mt-0.5 shrink-0"/><span>{error}</span></div>{/if}
   </form>
   {#snippet footer()}

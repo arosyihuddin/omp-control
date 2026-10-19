@@ -132,7 +132,7 @@
             <div>
               <label class="mb-2 block text-sm font-medium" for="auth-password">Password</label>
               <div class="auth-input flex items-center rounded-lg border border-line bg-surface transition focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/10">
-                <input id="auth-password" bind:value={password} required minlength={mode === 'setup' ? 12 : undefined} maxlength="1024" type={showPassword ? 'text' : 'password'} autocomplete={mode === 'setup' ? 'new-password' : 'current-password'} class="min-w-0 flex-1 rounded-none bg-transparent px-3.5 py-3 text-sm outline-none focus-visible:ring-0" placeholder={mode === 'setup' ? 'Minimal 12 karakter' : 'Masukkan password'} />
+                <input id="auth-password" bind:value={password} required minlength={mode === 'setup' ? 8 : undefined} maxlength="1024" type={showPassword ? 'text' : 'password'} autocomplete={mode === 'setup' ? 'new-password' : 'current-password'} class="min-w-0 flex-1 rounded-none bg-transparent px-3.5 py-3 text-sm outline-none focus-visible:ring-0" placeholder={mode === 'setup' ? 'Minimal 8 karakter' : 'Masukkan password'} />
                 <button type="button" class="mr-1.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-fg-subtle outline-none transition hover:bg-surface-hover hover:text-fg focus-visible:ring-0" aria-label={showPassword ? 'Sembunyikan password' : 'Tampilkan password'} aria-pressed={showPassword} onclick={() => showPassword = !showPassword}>
                   {#if showPassword}
                     <svg viewBox="0 0 24 24" class="h-[18px] w-[18px]" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="M9.9 5.2A10.8 10.8 0 0 1 12 5c5 0 8.5 4.5 9.5 7a11.8 11.8 0 0 1-3.1 4.2"/><path d="M6.2 6.2A12.5 12.5 0 0 0 2.5 12c1 2.5 4.5 7 9.5 7a10.4 10.4 0 0 0 3.1-.5"/></svg>
@@ -147,7 +147,7 @@
               <div>
                 <label class="mb-2 block text-sm font-medium" for="auth-confirm-password">Konfirmasi password</label>
                 <div class="auth-input flex items-center rounded-lg border border-line bg-surface transition focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/10">
-                  <input id="auth-confirm-password" bind:value={confirmPassword} required minlength="12" maxlength="1024" type={showConfirmPassword ? 'text' : 'password'} autocomplete="new-password" class="min-w-0 flex-1 rounded-none bg-transparent px-3.5 py-3 text-sm outline-none focus-visible:ring-0" placeholder="Ulangi password" />
+                  <input id="auth-confirm-password" bind:value={confirmPassword} required minlength="8" maxlength="1024" type={showConfirmPassword ? 'text' : 'password'} autocomplete="new-password" class="min-w-0 flex-1 rounded-none bg-transparent px-3.5 py-3 text-sm outline-none focus-visible:ring-0" placeholder="Ulangi password" />
                   <button type="button" class="mr-1.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-fg-subtle outline-none transition hover:bg-surface-hover hover:text-fg focus-visible:ring-0" aria-label={showConfirmPassword ? 'Sembunyikan konfirmasi password' : 'Tampilkan konfirmasi password'} aria-pressed={showConfirmPassword} onclick={() => showConfirmPassword = !showConfirmPassword}>
                     {#if showConfirmPassword}
                       <svg viewBox="0 0 24 24" class="h-[18px] w-[18px]" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="M9.9 5.2A10.8 10.8 0 0 1 12 5c5 0 8.5 4.5 9.5 7a11.8 11.8 0 0 1-3.1 4.2"/><path d="M6.2 6.2A12.5 12.5 0 0 0 2.5 12c1 2.5 4.5 7 9.5 7a10.4 10.4 0 0 0 3.1-.5"/></svg>
@@ -156,7 +156,7 @@
                     {/if}
                   </button>
                 </div>
-                <p class="mt-2 text-xs text-fg-subtle">Password minimal 12 karakter. Akun pertama hanya dapat dibuat sekali.</p>
+                <p class="mt-2 text-xs text-fg-subtle">Password minimal 8 karakter. Akun pertama hanya dapat dibuat sekali.</p>
               </div>
             {/if}
 

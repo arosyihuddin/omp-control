@@ -311,7 +311,7 @@ export async function handleControlRequest(req: Request, server?: any): Promise<
       const username = typeof body.username === "string" ? body.username.trim().toLowerCase() : "";
       const password = typeof body.password === "string" ? body.password : "";
       if (!/^[a-z0-9._-]{3,64}$/.test(username)) return fail("INVALID_USERNAME", "Username must be 3–64 characters and use letters, numbers, dots, underscores, or hyphens");
-      if (password.length < 12 || password.length > 1024) return fail("INVALID_PASSWORD", "Password must be between 12 and 1024 characters");
+      if (password.length < 8 || password.length > 1024) return fail("INVALID_PASSWORD", "Password must be between 8 and 1024 characters");
       const id = randomUUID();
       db.query("INSERT INTO auth_users (id,username,password_hash,created_at) VALUES (?,?,?,?)").run(id, username, await Bun.password.hash(password), new Date().toISOString());
       const token = randomUUID() + randomUUID();
