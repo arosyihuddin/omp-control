@@ -27,8 +27,8 @@
     </div>
     <div class="flex shrink-0 flex-wrap gap-2">
       <Button size="sm" variant="danger" disabled={busy} onclick={() => ondecide('deny')}><CircleX size={13} /> Deny</Button>
-      <Button size="sm" disabled={busy} title="Allow this operation once." onclick={() => ondecide('approve')}>
-        <CircleCheck size={13} /> Allow once
+      <Button size="sm" disabled={busy} title="Allow this operation." onclick={() => ondecide('approve')}>
+        <CircleCheck size={13} /> Allow
       </Button>
     </div>
   </div>

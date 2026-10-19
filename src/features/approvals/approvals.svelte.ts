@@ -27,12 +27,32 @@ class ApprovalsStore {
     this.actingId = id;
     this.error = '';
     try {
-      await approvalsApi.decide(id, decision);
-      await this.load();
+      const result = await approvalsApi.decide(id, decision) as { approval?: Approval };
+      if (result.approval) this.upsert(result.approval);
     } catch (error) {
       this.error = errorMessage(error, 'Unable to update approval');
     } finally {
       this.actingId = '';
+    }
+  }
+
+  private upsert(approval: Approval) {
+    const index = this.items.findIndex((item) => item.id === approval.id);
+    if (index === -1) this.items = [approval, ...this.items];
+    else this.items = this.items.map((item) => item.id === approval.id ? approval : item);
+    this.items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  private handleEvent(type: string, event: MessageEvent) {
+    if (type === 'approval.cleared') {
+      this.items = this.items.filter((approval) => approval.status === 'pending');
+      return;
+    }
+    try {
+      const approval = JSON.parse(event.data) as Approval;
+      if (approval?.id) this.upsert(approval);
+    } catch {
+      void this.load();
     }
   }
 
@@ -43,7 +63,7 @@ class ApprovalsStore {
     this.error = '';
     try {
       await approvalsApi.clear();
-      await this.load();
+      this.items = this.items.filter((approval) => approval.status === 'pending');
       return true;
     } catch (error) {
       this.error = errorMessage(error, 'Unable to clear approval history');
@@ -53,9 +73,9 @@ class ApprovalsStore {
     }
   }
 
-  /** Reload on realtime approval events. Returns a cleanup function. */
+  /** Apply realtime approval events directly to avoid redundant list requests. */
   watch() {
-    return onServerEvents(['approval.created', 'approval.updated', 'approval.cleared'], () => void this.load());
+    return onServerEvents(['approval.created', 'approval.updated', 'approval.cleared'], (event) => this.handleEvent(event.type, event));
   }
 }
 

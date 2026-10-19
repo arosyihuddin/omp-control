@@ -4,7 +4,7 @@ import type { Approval } from '$lib/types';
 export function decisionLabel(approval: Approval): string {
   switch (approval.status) {
     case 'approved':
-      return approval.sessionId ? 'Allowed for session' : 'Allowed once';
+      return 'Allowed';
     case 'denied':
       return 'Denied';
     case 'expired':
