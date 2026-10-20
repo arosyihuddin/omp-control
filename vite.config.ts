@@ -3,6 +3,7 @@ import { defineConfig, type Plugin } from 'vite';
 
 const bunPlatformUpgradeFix: Plugin = {
   name: 'omp-control-bun-platform-upgrade-fix',
+  apply: 'serve',
   enforce: 'post',
   transform(code, id, options) {
     if (
