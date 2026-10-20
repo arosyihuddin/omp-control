@@ -3,6 +3,7 @@
   import { Activity, ArrowLeft, ArrowRight, Check, CircleAlert, EllipsisVertical, Eye, EyeOff, LogOut, Pencil, Plus, Server, Settings2, Trash2 } from '@lucide/svelte';
   import { Avatar, Modal, ConfirmDialog, Skeleton } from '$lib/components/ui';
   import { profile } from '$lib/stores/profile.svelte';
+  import { authUser } from '$lib/stores/auth.svelte';
   import ProfileModal from './ProfileModal.svelte';
   import { instanceRegistry } from '$lib/stores/instances.svelte';
   import { instancesApi } from '$lib/api/instances';
@@ -158,7 +159,7 @@
     <div class="relative" data-account-menu>
       <div class="flex items-center gap-1">
       <button type="button" class="flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-surface-hover" aria-label="Account" title="Account" aria-expanded={accountOpen} onclick={() => (accountOpen = !accountOpen)}>
-        <Avatar name={profile.data?.displayName ?? 'Profile'} color={profile.data?.avatarColor} class="ring-2 ring-accent/70 ring-offset-1 ring-offset-canvas" />
+        <Avatar name={authUser.username ?? 'User'} color={profile.data?.avatarColor} class="ring-2 ring-accent/70 ring-offset-1 ring-offset-canvas" />
       </button>
       </div>
       {#if accountOpen}

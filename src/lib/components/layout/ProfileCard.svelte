@@ -2,6 +2,7 @@
   import { ArrowLeftRight, LogOut, Server, Settings } from '@lucide/svelte';
   import { Avatar, Menu, MenuItem } from '$lib/components/ui';
   import { profile } from '$lib/stores/profile.svelte';
+  import { authUser } from '$lib/stores/auth.svelte';
   import { instanceRegistry } from '$lib/stores/instances.svelte';
   import ProfileModal from './ProfileModal.svelte';
 
@@ -16,7 +17,8 @@
   let settingsOpen = $state(false);
   let settingsSection = $state<'profile' | 'general' | 'editor' | 'instances' | 'sudo'>('profile');
 
-  const name = $derived(profile.data?.displayName ?? 'Profile');
+  const name = $derived(profile.data?.displayName ?? 'User');
+  const username = $derived(authUser.username ?? 'User');
   const instanceName = $derived(instanceRegistry.active?.name ?? 'No instance selected');
   const instanceStatus = $derived(instanceRegistry.active?.status ?? 'unknown');
   const isChecking = $derived(instanceRegistry.checkingIds.includes(instanceRegistry.activeId ?? ''));
@@ -55,7 +57,7 @@
         <Avatar {name} color={profile.data?.avatarColor} class="ring-2 ring-accent/70 ring-offset-1 ring-offset-surface" />
         <div class="min-w-0 flex-1">
           <div class="truncate text-sm font-medium text-fg">{name}</div>
-          <div class="truncate text-xs text-fg-subtle">{profile.data?.role ?? 'User'}</div>
+          <div class="truncate text-xs text-fg-subtle">@{username}</div>
         </div>
       </div>
       <button type="button" class="mt-3 flex w-full items-center gap-2.5 rounded-md border border-line px-2.5 py-2 text-left text-sm text-fg-muted transition-colors hover:border-line-strong hover:bg-surface-hover hover:text-fg" title="Switch instance" onclick={() => { close(); window.dispatchEvent(new CustomEvent('omp-control:show-instance-picker')); }}>

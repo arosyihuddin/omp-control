@@ -128,7 +128,6 @@ export interface DashboardSnapshot {
 export interface Profile {
   id: string;
   displayName: string;
-  role: string | null;
   avatarColor: string | null;
 }
 export interface PinEntry {

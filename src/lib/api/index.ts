@@ -143,12 +143,20 @@ export const workspaceApi = {
 
 export const profileApi = {
   get: () => request<Profile>('/api/profile'),
-  update: (input: Partial<Pick<Profile, 'displayName' | 'role' | 'avatarColor'>>) =>
+  update: (input: Partial<Pick<Profile, 'displayName' | 'avatarColor'>>) =>
     request<Profile>('/api/profile', {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(input),
     }),
+};
+
+export const accountApi = {
+  verifyRecoveryToken: (token: string) =>
+    postJson<{ verified: boolean; challenge: string; expiresIn: number }>('/control/v1/auth/recovery/verify', { token }),
+  changePasswordWithRecovery: (input: { challenge: string; currentPassword: string; newPassword: string }) =>
+    postJson<{ changed: boolean; message: string }>('/control/v1/account/password/recovery', input),
+  changePassword: (input: { currentPassword: string; newPassword: string }) => postJson<{ changed: boolean; message: string }>('/control/v1/account/password', input),
 };
 
 const put = <T>(url: string, body: unknown) =>

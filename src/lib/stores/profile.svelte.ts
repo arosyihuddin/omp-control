@@ -1,26 +1,21 @@
 import { errorMessage, profileApi } from '$lib/api';
 import type { Profile } from '$lib/types';
 
-/** The dashboard owner's profile, persisted in the control-plane database. */
+/** Per-user visual preferences stored by the active OMP-MCP instance. */
 class ProfileStore {
   data = $state<Profile | null>(null);
-
-  get name() {
-    return this.data?.displayName ?? '';
-  }
 
   async load() {
     try {
       this.data = await profileApi.get();
     } catch {
-      /* keep the placeholder until the server answers */
+      /* Keep the profile defaults until the server answers. */
     }
   }
 
-  /** Optimistic update. Returns an error message, or `null` on success. */
-  async save(input: { displayName: string; role: string; avatarColor: string }): Promise<string | null> {
+  async save(input: Partial<Pick<Profile, 'displayName' | 'avatarColor'>>): Promise<string | null> {
     const before = this.data;
-    if (before) this.data = { ...before, ...input, role: input.role || null };
+    if (before) this.data = { ...before, ...input };
     try {
       this.data = await profileApi.update(input);
       return null;

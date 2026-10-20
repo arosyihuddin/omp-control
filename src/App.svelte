@@ -7,6 +7,7 @@
   import { dashboard } from '$lib/stores/dashboard.svelte';
   import { instanceRegistry } from '$lib/stores/instances.svelte';
   import { profile } from '$lib/stores/profile.svelte';
+  import { authUser } from '$lib/stores/auth.svelte';
   import { router } from '$lib/stores/router.svelte';
   import { theme } from '$lib/stores/theme.svelte';
   import { ui } from '$lib/stores/ui.svelte';
@@ -44,12 +45,14 @@
         console.error('Logout request failed:', error);
       }
       authenticated = false;
+      authUser.clear();
       showInstancePicker = false;
       stopDashboardEvents?.();
       stopDashboardEvents = undefined;
     };
     const onAuthRequired = () => {
       authenticated = false;
+      authUser.clear();
       showInstancePicker = false;
       stopDashboardEvents?.();
       stopDashboardEvents = undefined;
@@ -67,8 +70,9 @@
     window.addEventListener('omp-control:logout', onLogout);
     void fetch('/control/v1/auth/status')
       .then((response) => response.ok ? response.json() : Promise.reject(new Error('Unable to check login status')))
-      .then(async (status: { authenticated: boolean }) => {
+      .then(async (status: { authenticated: boolean; username?: string | null }) => {
         authenticated = status.authenticated;
+        authUser.setUsername(status.username);
         if (authenticated) {
           loadingInstanceData = true;
           await instanceRegistry.load();
@@ -122,6 +126,11 @@
   });
 
   async function handleAuthenticated() {
+    const response = await fetch('/control/v1/auth/status');
+    if (response.ok) {
+      const status = await response.json() as { username?: string | null };
+      authUser.setUsername(status.username);
+    }
     authenticated = true;
     loadingInstanceData = true;
     await instanceRegistry.load();

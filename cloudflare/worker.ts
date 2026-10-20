@@ -439,9 +439,14 @@ async function handle(req: Request, env: Env): Promise<Response> {
       const row = await env.DB.prepare(
         "SELECT COUNT(*) AS count FROM auth_users",
       ).first<{ count: number }>();
+      const token = tokenFrom(req);
+      const user = token ? await env.DB.prepare(
+        "SELECT u.username FROM auth_sessions s JOIN auth_users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?",
+      ).bind(await hash(token), Date.now()).first<{ username: string }>() : null;
       return json({
         configured: (row?.count ?? 0) > 0,
-        authenticated: await authenticated(req, env),
+        authenticated: !!user,
+        username: user?.username ?? null,
       });
     }
     if (path === "/control/v1/auth/setup" && req.method === "POST") {
@@ -569,6 +574,33 @@ async function handle(req: Request, env: Env): Promise<Response> {
       !(await authenticated(req, env))
     )
       return fail("UNAUTHENTICATED", "Please log in to continue", 401);
+    if (path === "/control/v1/account/password" && req.method === "POST") {
+      const token = tokenFrom(req);
+      const user = token ? await env.DB.prepare("SELECT u.id,u.password_hash FROM auth_sessions s JOIN auth_users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?").bind(await hash(token), Date.now()).first<{ id: string; password_hash: string }>() : null;
+      if (!user) return fail("UNAUTHENTICATED", "Please log in to continue", 401);
+      const b = await body(req), current = typeof b.currentPassword === "string" ? b.currentPassword : "", next = typeof b.newPassword === "string" ? b.newPassword : "";
+      if (!current || !(await passwordVerify(current, user.password_hash))) return fail("INVALID_CURRENT_PASSWORD", "Password saat ini tidak benar.", 400);
+      if (next.length < 8 || next.length > 1024) return fail("INVALID_PASSWORD", "Password baru harus terdiri dari 8–1024 karakter.");
+      if (current === next) return fail("PASSWORD_UNCHANGED", "Password baru harus berbeda dari password saat ini.");
+      const stored = await passwordHash(next), replacement = uuid() + uuid();
+      await env.DB.batch([env.DB.prepare("UPDATE auth_users SET password_hash=? WHERE id=?").bind(stored, user.id), env.DB.prepare("DELETE FROM auth_sessions WHERE user_id=?").bind(user.id), env.DB.prepare("INSERT INTO auth_sessions (token_hash,user_id,expires_at) VALUES (?,?,?)").bind(await hash(replacement), user.id, Date.now() + 2592000000)]);
+      return json({ changed: true, message: "Password berhasil diubah." }, 200, { "set-cookie": cookie(replacement, 2592000, req) });
+    }
+    if (path === "/control/v1/account/password/recovery" && req.method === "POST") {
+      const token = tokenFrom(req);
+      const user = token ? await env.DB.prepare("SELECT u.id,u.password_hash FROM auth_sessions s JOIN auth_users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?").bind(await hash(token), Date.now()).first<{ id: string; password_hash: string }>() : null;
+      if (!user) return fail("UNAUTHENTICATED", "Please log in to continue", 401);
+      const b = await body(req), challenge = typeof b.challenge === "string" ? b.challenge : "", current = typeof b.currentPassword === "string" ? b.currentPassword : "", next = typeof b.newPassword === "string" ? b.newPassword : "";
+      if (!challenge || challenge.length > 256) return fail("INVALID_RECOVERY_CHALLENGE", "Sesi pemulihan tidak valid atau kedaluwarsa.", 401);
+      if (!current || !(await passwordVerify(current, user.password_hash))) return fail("INVALID_CURRENT_PASSWORD", "Password lama tidak benar.", 400);
+      if (next.length < 8 || next.length > 1024) return fail("INVALID_PASSWORD", "Password baru harus terdiri dari 8–1024 karakter.");
+      if (current === next) return fail("PASSWORD_UNCHANGED", "Password baru harus berbeda dari password lama.");
+      const challengeHash = await hash(challenge), timestamp = Date.now(), stored = await passwordHash(next), replacement = uuid() + uuid();
+      const valid = await env.DB.prepare("SELECT token_hash FROM auth_recovery_challenges WHERE token_hash=? AND expires_at>?").bind(challengeHash, timestamp).first();
+      if (!valid) return fail("INVALID_RECOVERY_CHALLENGE", "Sesi pemulihan tidak valid atau kedaluwarsa.", 401);
+      await env.DB.batch([env.DB.prepare("DELETE FROM auth_recovery_challenges WHERE token_hash=? AND expires_at>?").bind(challengeHash, timestamp), env.DB.prepare("UPDATE auth_users SET password_hash=? WHERE id=?").bind(stored, user.id), env.DB.prepare("DELETE FROM auth_sessions WHERE user_id=?").bind(user.id), env.DB.prepare("INSERT INTO auth_sessions (token_hash,user_id,expires_at) VALUES (?,?,?)").bind(await hash(replacement), user.id, timestamp + 2592000000)]);
+      return json({ changed: true, message: "Password berhasil diubah." }, 200, { "set-cookie": cookie(replacement, 2592000, req) });
+    }
     const runtime = url.pathname.match(
       /^\/control\/v1\/instances\/([^/]+)\/runtime(\/.*)$/,
     );

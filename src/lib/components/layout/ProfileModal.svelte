@@ -1,26 +1,19 @@
 <script lang="ts">
-  import { Check, Code2, Keyboard, LockKeyhole, Moon, Network, Settings2, Sun, UserRound, KeyRound, Eye, EyeOff } from '@lucide/svelte';
-  import { Avatar, Button, Input, Modal } from '$lib/components/ui';
+  import { Check, Code2, Keyboard, LockKeyhole, Moon, Network, Settings2, Sun, UserRound, KeyRound, Eye, EyeOff, Pencil } from '@lucide/svelte';
+  import { Avatar, Button, Modal } from '$lib/components/ui';
   import { profile } from '$lib/stores/profile.svelte';
+  import { authUser } from '$lib/stores/auth.svelte';
   import { theme } from '$lib/stores/theme.svelte';
-  import { rootCommandsApi, type RootCommandConfig } from '$lib/api';
+  import { accountApi, rootCommandsApi, type RootCommandConfig } from '$lib/api';
   import InstancesManager from './InstancesManager.svelte';
 
   interface Props { open: boolean; onclose: () => void; initialSection?: 'profile' | 'general' | 'editor' | 'instances' | 'sudo'; }
   let { open, onclose, initialSection = 'profile' }: Props = $props();
   type Section = 'profile' | 'general' | 'editor' | 'instances' | 'sudo';
   let section = $state<Section>('profile');
-  const colors = [
-    { key: 'accent', swatch: 'bg-accent', label: 'Indigo' },
-    { key: 'info', swatch: 'bg-info', label: 'Blue' },
-    { key: 'success', swatch: 'bg-success', label: 'Green' },
-    { key: 'warning', swatch: 'bg-warning', label: 'Amber' },
-    { key: 'danger', swatch: 'bg-danger', label: 'Red' },
-  ];
-  let displayName = $state('');
-  let role = $state('');
-  let avatarColor = $state('accent');
-  let error = $state('');
+  let editNameOpen = $state(false);
+  let displayNameDraft = $state('');
+  let displayNameError = $state('');
   let saving = $state(false);
   let sudoConfig = $state<RootCommandConfig | null>(null);
   let sudoPassword = $state('');
@@ -29,6 +22,17 @@
   let sudoError = $state('');
   let sudoSaved = $state(false);
   let showSudoPassword = $state(false);
+  let currentPassword = $state('');
+  let newPassword = $state('');
+  let confirmNewPassword = $state('');
+  let passwordModalOpen = $state(false);
+  let passwordStep = $state<'token' | 'password'>('token');
+  let recoveryToken = $state('');
+  let recoveryChallenge = $state('');
+  let passwordSaving = $state(false);
+  let showRecoveryToken = $state(false);
+  let passwordError = $state('');
+  let passwordSaved = $state(false);
   async function loadSudoConfig() {
     sudoLoading = true; sudoError = '';
     try { sudoConfig = await rootCommandsApi.get(); }
@@ -49,21 +53,58 @@
     catch (cause) { sudoError = cause instanceof Error ? cause.message : 'Gagal menghapus password sudo.'; }
     finally { sudoSaving = false; }
   }
+  async function verifyPasswordRecovery() {
+    if (passwordSaving || !recoveryToken.trim()) return;
+    passwordSaving = true; passwordError = '';
+    try {
+      const response = await fetch('/control/v1/auth/recovery/verify', { method: 'POST', headers: { 'content-type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ token: recoveryToken.trim() }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result?.error?.message ?? 'Recovery token tidak valid.');
+      recoveryChallenge = result.challenge; recoveryToken = ''; passwordStep = 'password';
+      currentPassword = ''; newPassword = ''; confirmNewPassword = '';
+    } catch (cause) { passwordError = cause instanceof Error ? cause.message : 'Recovery token tidak valid.'; }
+    finally { passwordSaving = false; }
+  }
+  async function changePassword() {
+    if (passwordSaving) return;
+    passwordError = ''; passwordSaved = false;
+    if (newPassword.length < 8) { passwordError = 'Password baru minimal 8 karakter.'; return; }
+    if (newPassword !== confirmNewPassword) { passwordError = 'Konfirmasi password baru tidak cocok.'; return; }
+    if (currentPassword === newPassword) { passwordError = 'Password baru harus berbeda dari password saat ini.'; return; }
+    passwordSaving = true;
+    try {
+      await accountApi.changePasswordWithRecovery({ challenge: recoveryChallenge, currentPassword, newPassword });
+      currentPassword = ''; newPassword = ''; confirmNewPassword = ''; recoveryChallenge = '';
+      passwordModalOpen = false; passwordStep = 'token'; passwordSaved = true;
+    } catch (cause) { passwordError = cause instanceof Error ? cause.message : 'Gagal mengubah password.'; }
+    finally { passwordSaving = false; }
+  }
+  function openPasswordModal() {
+    passwordError = ''; passwordSaved = false; recoveryToken = ''; recoveryChallenge = '';
+    currentPassword = ''; newPassword = ''; confirmNewPassword = ''; passwordStep = 'token'; passwordModalOpen = true;
+  }
   $effect(() => {
     if (!open) return;
     section = initialSection;
-    displayName = profile.data?.displayName ?? '';
-    role = profile.data?.role ?? '';
-    avatarColor = profile.data?.avatarColor ?? 'accent';
-    error = '';
   });
-  async function submit() {
-    if (!displayName.trim() || saving) return;
+  function openDisplayNameEditor() {
+    displayNameDraft = profile.data?.displayName ?? 'User';
+    displayNameError = '';
+    editNameOpen = true;
+  }
+  async function saveDisplayName() {
+    const displayName = displayNameDraft.trim();
+    if (!displayName) {
+      displayNameError = 'Display name tidak boleh kosong.';
+      return;
+    }
+    if (saving) return;
     saving = true;
-    const message = await profile.save({ displayName: displayName.trim(), role: role.trim(), avatarColor });
+    displayNameError = '';
+    const message = await profile.save({ displayName });
     saving = false;
-    if (message) error = message;
-    else onclose();
+    if (message) displayNameError = message;
+    else editNameOpen = false;
   }
   const sections = [
     { id: 'profile' as const, label: 'Profile', icon: UserRound },
@@ -99,22 +140,19 @@
 
     <section class="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
       {#if section === 'profile'}
-        <div class="mb-5"><h4 class="text-sm font-semibold">Profile</h4><p class="mt-1 text-xs text-fg-subtle">Update your account details.</p></div>
-        <div class="mb-5 flex items-center gap-3">
-          <Avatar name={displayName} color={avatarColor} size="lg" />
-          <div><p class="mb-2 text-xs text-fg-subtle">Avatar color</p><div class="flex gap-2" role="radiogroup" aria-label="Avatar color">
-            {#each colors as color (color.key)}
-              <button type="button" role="radio" aria-checked={avatarColor === color.key} aria-label={color.label} class={['h-5 w-5 rounded-full transition-shadow', color.swatch, avatarColor === color.key ? 'ring-2 ring-fg ring-offset-2 ring-offset-surface-raised' : 'hover:ring-2 hover:ring-line-strong']} onclick={() => (avatarColor = color.key)}></button>
-            {/each}
-          </div></div>
+        <div class="mb-5"><h4 class="text-sm font-semibold">Profile</h4><p class="mt-1 text-xs text-fg-subtle">Informasi profil akun yang sedang login.</p></div>
+        <div class="flex items-center gap-3 py-2">
+          <Avatar name={profile.data?.displayName ?? 'User'} color={profile.data?.avatarColor} size="lg" />
+          <div class="min-w-0 flex-1">
+            <p class="truncate text-sm font-medium text-fg">{profile.data?.displayName ?? 'User'}</p>
+            <p class="mt-0.5 truncate text-xs text-fg-subtle">@{authUser.username ?? 'User'}</p>
+          </div>
+          <button type="button" class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg" aria-label="Edit display name" title="Edit display name" onclick={openDisplayNameEditor}><Pencil size={15}/></button>
         </div>
-        <div class="mb-4 space-y-1.5"><label class="block text-xs text-fg-subtle" for="profile-name">Display name</label><Input id="profile-name" bind:value={displayName} maxlength={48} onkeydown={(event) => event.key === 'Enter' && submit()} /></div>
-        <div class="mb-5 space-y-1.5"><label class="block text-xs text-fg-subtle" for="profile-role">Role</label><Input id="profile-role" bind:value={role} maxlength={48} placeholder="Administrator" onkeydown={(event) => event.key === 'Enter' && submit()} /></div>
-        <div class="border-t border-line pt-4">
-          <div class="flex items-center gap-3"><LockKeyhole size={17} class="text-fg-subtle"/><div class="min-w-0 flex-1"><p class="text-sm font-medium">Password</p><p class="mt-0.5 text-xs text-fg-subtle">Password management will be available when sign-in is enabled.</p></div><span class="shrink-0 rounded border border-line px-2 py-1 text-[11px] text-fg-faint">Coming later</span></div>
+        <div class="mt-5 border-t border-line pt-4">
+          <div class="flex items-center gap-3"><LockKeyhole size={17} class="text-fg-subtle"/><div class="min-w-0 flex-1"><p class="text-sm font-medium">Password</p><p class="mt-0.5 text-xs text-fg-subtle">Verifikasi recovery token sebelum mengganti password.</p></div><Button size="sm" variant="secondary" onclick={openPasswordModal}>Change</Button></div>
+          {#if passwordSaved}<p class="mt-3 text-sm text-success" role="status">Password berhasil diubah.</p>{/if}
         </div>
-        {#if error}<p class="mt-3 text-xs text-danger" role="alert">{error}</p>{/if}
-        <div class="mt-5 flex justify-end"><Button size="sm" variant="primary" disabled={!displayName.trim() || saving} onclick={submit}>{saving ? 'Saving…' : 'Save changes'}</Button></div>
       {:else if section === 'general'}
         <div class="mb-5"><h4 class="text-sm font-semibold">Umum</h4><p class="mt-1 text-xs text-fg-subtle">Pengaturan umum aplikasi.</p></div>
         <div class="border-t border-line pt-4">
@@ -158,4 +196,30 @@
       {/if}
     </section>
   </div>
+</Modal>
+<Modal open={editNameOpen} title="Edit display name" description="Profile" width="max-w-md" onclose={() => (editNameOpen = false)} autofocus>
+  <form class="space-y-4 p-4" onsubmit={(event) => { event.preventDefault(); void saveDisplayName(); }}>
+    <label class="block space-y-1.5 text-sm text-fg">
+      <span class="font-medium">Display name</span>
+      <input bind:value={displayNameDraft} maxlength="80" required autocomplete="nickname" placeholder="Masukkan display name" class="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg outline-none focus:border-accent" />
+    </label>
+    {#if displayNameError}<p class="text-sm text-danger" role="alert">{displayNameError}</p>{/if}
+    <div class="flex justify-end gap-2">
+      <Button size="sm" variant="secondary" disabled={saving} onclick={() => (editNameOpen = false)}>Batal</Button>
+      <Button size="sm" variant="primary" disabled={saving || !displayNameDraft.trim()} onclick={() => void saveDisplayName()}>{saving ? 'Menyimpan…' : 'Simpan'}</Button>
+    </div>
+  </form>
+</Modal>
+<Modal open={passwordModalOpen} title="Change password" description={passwordStep === 'token' ? 'Verifikasi recovery token untuk melanjutkan.' : 'Token valid. Masukkan password lama dan password baru.'} width="max-w-md" onclose={() => { if (!passwordSaving) passwordModalOpen = false; }} autofocus>
+  <form class="space-y-4 p-4" onsubmit={(event) => { event.preventDefault(); if (passwordStep === 'token') void verifyPasswordRecovery(); else void changePassword(); }}>
+    {#if passwordStep === 'token'}
+      <label class="block space-y-1.5 text-sm"><span class="font-medium">Recovery token</span><div class="relative"><input type={showRecoveryToken ? 'text' : 'password'} bind:value={recoveryToken} required minlength="32" maxlength="4096" autocomplete="off" placeholder="Masukkan recovery token" class="w-full rounded-md border border-line bg-surface px-3 py-2 pr-10 text-sm text-fg outline-none focus:border-accent"/><button type="button" class="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-fg-subtle hover:text-fg" aria-label={showRecoveryToken ? 'Sembunyikan token' : 'Tampilkan token'} onclick={() => showRecoveryToken = !showRecoveryToken}>{#if showRecoveryToken}<EyeOff size={16}/>{:else}<Eye size={16}/>{/if}</button></div></label>
+    {:else}
+      <label class="block space-y-1.5 text-sm"><span class="font-medium">Password lama</span><input type="password" bind:value={currentPassword} required autocomplete="current-password" class="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg outline-none focus:border-accent" /></label>
+      <label class="block space-y-1.5 text-sm"><span class="font-medium">Password baru</span><input type="password" bind:value={newPassword} required minlength="8" maxlength="1024" autocomplete="new-password" class="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg outline-none focus:border-accent" /></label>
+      <label class="block space-y-1.5 text-sm"><span class="font-medium">Konfirmasi password baru</span><input type="password" bind:value={confirmNewPassword} required minlength="8" maxlength="1024" autocomplete="new-password" class="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg outline-none focus:border-accent" /></label>
+    {/if}
+    {#if passwordError}<p class="text-sm text-danger" role="alert">{passwordError}</p>{/if}
+    <div class="flex justify-end gap-2"><Button size="sm" variant="secondary" disabled={passwordSaving} onclick={() => passwordModalOpen = false}>Batal</Button><Button type="submit" size="sm" variant="primary" disabled={passwordSaving || (passwordStep === 'token' ? !recoveryToken.trim() : !currentPassword || !newPassword || !confirmNewPassword)}>{passwordSaving ? 'Memproses…' : passwordStep === 'token' ? 'Verifikasi token' : 'Ubah password'}</Button></div>
+  </form>
 </Modal>

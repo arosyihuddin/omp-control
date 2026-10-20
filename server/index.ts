@@ -329,7 +329,9 @@ export async function handleControlRequest(req: Request, server?: any): Promise<
   try {
     if (url.pathname === "/control/v1/auth/status" && req.method === "GET") {
       const configured = (db.query("SELECT COUNT(*) AS count FROM auth_users").get() as { count: number }).count > 0;
-      return send({ configured, authenticated: authenticated(req) });
+      const token = sessionToken(req);
+      const user = token ? db.query("SELECT u.username FROM auth_sessions s JOIN auth_users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>? ").get(hashToken(token), Date.now()) as { username: string } | null : null;
+      return send({ configured, authenticated: !!user, username: user?.username ?? null });
     }
     if (url.pathname === "/control/v1/auth/setup" && req.method === "POST") {
       if ((db.query("SELECT COUNT(*) AS count FROM auth_users").get() as { count: number }).count > 0) return fail("ALREADY_CONFIGURED", "An account has already been created", 409);
@@ -400,6 +402,52 @@ export async function handleControlRequest(req: Request, server?: any): Promise<
       const token = sessionToken(req);
       if (token) db.query("DELETE FROM auth_sessions WHERE token_hash = ?").run(hashToken(token));
       return authSend({ authenticated: false }, sessionCookie("", 0, requestUsesHttps(req)));
+    }
+    if (url.pathname === "/control/v1/account/password" && req.method === "POST") {
+      const token = sessionToken(req);
+      if (!token) return fail("UNAUTHENTICATED", "Please log in to continue", 401);
+      const user = db.query("SELECT u.id,u.password_hash FROM auth_sessions s JOIN auth_users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?").get(hashToken(token), Date.now()) as { id: string; password_hash: string } | null;
+      if (!user) return fail("UNAUTHENTICATED", "Please log in to continue", 401);
+      const body = await readJson(req);
+      const currentPassword = typeof body.currentPassword === "string" ? body.currentPassword : "";
+      const newPassword = typeof body.newPassword === "string" ? body.newPassword : "";
+      if (!currentPassword || !(await Bun.password.verify(currentPassword, user.password_hash))) return fail("INVALID_CURRENT_PASSWORD", "Password saat ini tidak benar.", 400);
+      if (newPassword.length < 8 || newPassword.length > 1024) return fail("INVALID_PASSWORD", "Password baru harus terdiri dari 8–1024 karakter.");
+      if (currentPassword === newPassword) return fail("PASSWORD_UNCHANGED", "Password baru harus berbeda dari password saat ini.");
+      const newHash = await Bun.password.hash(newPassword);
+      const newToken = randomUUID() + randomUUID();
+      db.query("BEGIN IMMEDIATE").run();
+      try {
+        db.query("UPDATE auth_users SET password_hash=? WHERE id=?").run(newHash, user.id);
+        db.query("DELETE FROM auth_sessions WHERE user_id=?").run(user.id);
+        db.query("INSERT INTO auth_sessions (token_hash,user_id,expires_at) VALUES (?,?,?)").run(hashToken(newToken), user.id, Date.now() + 30 * 24 * 60 * 60 * 1000);
+        db.query("COMMIT").run();
+      } catch (error) {
+        db.query("ROLLBACK").run();
+        throw error;
+      }
+      return authSend({ changed: true, message: "Password berhasil diubah." }, sessionCookie(newToken, 30 * 24 * 60 * 60, requestUsesHttps(req)));
+    }
+    if (url.pathname === "/control/v1/account/password/recovery" && req.method === "POST") {
+      const token = sessionToken(req);
+      const user = token ? db.query("SELECT u.id,u.password_hash FROM auth_sessions s JOIN auth_users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?").get(hashToken(token), Date.now()) as { id: string; password_hash: string } | null : null;
+      if (!user) return fail("UNAUTHENTICATED", "Please log in to continue", 401);
+      const body = await readJson(req), challenge = typeof body.challenge === "string" ? body.challenge : "", current = typeof body.currentPassword === "string" ? body.currentPassword : "", next = typeof body.newPassword === "string" ? body.newPassword : "";
+      if (!challenge || challenge.length > 256) return fail("INVALID_RECOVERY_CHALLENGE", "Sesi pemulihan tidak valid atau kedaluwarsa.", 401);
+      if (!current || !(await Bun.password.verify(current, user.password_hash))) return fail("INVALID_CURRENT_PASSWORD", "Password lama tidak benar.", 400);
+      if (next.length < 8 || next.length > 1024) return fail("INVALID_PASSWORD", "Password baru harus terdiri dari 8–1024 karakter.");
+      if (current === next) return fail("PASSWORD_UNCHANGED", "Password baru harus berbeda dari password lama.");
+      const challengeHash = hashToken(challenge), now = Date.now(), nextHash = await Bun.password.hash(next), nextToken = randomUUID() + randomUUID();
+      db.query("BEGIN IMMEDIATE").run();
+      try {
+        const valid = db.query("DELETE FROM auth_recovery_challenges WHERE token_hash=? AND expires_at>?").run(challengeHash, now);
+        if (!valid.changes) throw new Error("INVALID_RECOVERY_CHALLENGE");
+        db.query("UPDATE auth_users SET password_hash=? WHERE id=?").run(nextHash, user.id);
+        db.query("DELETE FROM auth_sessions WHERE user_id=?").run(user.id);
+        db.query("INSERT INTO auth_sessions (token_hash,user_id,expires_at) VALUES (?,?,?)").run(hashToken(nextToken), user.id, now + 2592000000);
+        db.query("COMMIT").run();
+      } catch (error) { db.query("ROLLBACK").run(); if (error instanceof Error && error.message === "INVALID_RECOVERY_CHALLENGE") return fail("INVALID_RECOVERY_CHALLENGE", "Sesi pemulihan tidak valid atau kedaluwarsa.", 401); throw error; }
+      return authSend({ changed: true, message: "Password berhasil diubah." }, sessionCookie(nextToken, 2592000, requestUsesHttps(req)));
     }
     if (!url.pathname.startsWith("/control/v1/auth/") && !authenticated(req)) return fail("UNAUTHENTICATED", "Please log in to continue", 401);
 

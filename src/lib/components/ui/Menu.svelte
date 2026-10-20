@@ -79,7 +79,7 @@
       role="menu"
       style={menuStyle}
       class={[
-        'fixed z-[60] max-h-[calc(100dvh-1rem)] overflow-y-auto overscroll-contain rounded-lg border border-line-strong bg-surface-raised p-1 shadow-pop',
+        'fixed z-[60] max-h-[calc(100dvh-1rem)] overflow-y-auto overscroll-contain rounded-lg border border-line-strong bg-surface-raised p-1 shadow-lg',
         width !== 'trigger' && width,
       ]}
     >
