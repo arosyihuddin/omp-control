@@ -1,9 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { RefreshCw, ScrollText } from '@lucide/svelte';
+  import { Check, ChevronDown, RefreshCw, ScrollText } from '@lucide/svelte';
   import { errorMessage, logsApi } from '$lib/api';
   import { onServerEvents } from '$lib/api/events';
-  import { EmptyState, IconButton, Panel, SearchInput, SegmentedControl, Skeleton } from '$lib/components/ui';
+  import { EmptyState, IconButton, Menu, MenuItem, Panel, SearchInput, Skeleton } from '$lib/components/ui';
   import type { ToolCallLog } from '$lib/types';
   import { LogRow } from '$features/logs';
 
@@ -132,7 +132,38 @@
   <div class="flex flex-col gap-2 border-b border-line p-3 sm:flex-row sm:items-center">
     <SearchInput class="flex-1" bind:value={search} placeholder="Search tool calls…" label="Search tool calls" />
     <div class="flex items-center gap-2">
-      <SegmentedControl label="Filter by status" options={statusOptions} bind:value={status} />
+      <Menu width="w-48">
+        {#snippet trigger({ toggle, open })}
+          <button
+            type="button"
+            aria-label="Filter by status"
+            aria-haspopup="menu"
+            aria-expanded={open}
+            onclick={toggle}
+            class="inline-flex h-8 items-center gap-2 rounded-md border border-line bg-surface px-3 text-sm text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg"
+          >
+            <span class="text-fg-faint">Status</span>
+            <span class="capitalize">{status === 'all' ? 'All statuses' : status === 'waiting_approval' ? 'Waiting approval' : status}</span>
+            <ChevronDown size={14} class="text-fg-faint" />
+          </button>
+        {/snippet}
+        {#snippet children({ close })}
+          {#each statusOptions as option (option.value)}
+            <MenuItem
+              class="justify-between capitalize"
+              aria-checked={status === option.value}
+              role="menuitemradio"
+              onclick={() => {
+                status = option.value;
+                close();
+              }}
+            >
+              <span>{option.value === 'all' ? 'All statuses' : option.label}</span>
+              {#if status === option.value}<Check size={14} class="text-accent-hover" />{/if}
+            </MenuItem>
+          {/each}
+        {/snippet}
+      </Menu>
       <IconButton label="Refresh logs" variant="outline" disabled={loading} onclick={load}>
         {#if loading}<Skeleton class="size-3.5" />{:else}<RefreshCw size={14} />{/if}
       </IconButton>
