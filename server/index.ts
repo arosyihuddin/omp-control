@@ -1,11 +1,10 @@
 import { Database } from "bun:sqlite";
 import { chmodSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { createHash } from "node:crypto";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 
 function initializeDatabase(): Database {
-  const dbPath = resolve(process.env.OMP_CONTROL_DB_PATH ?? "./data/omp-control.sqlite");
+  const dbPath = resolve("./data/omp-control.sqlite");
   mkdirSync(dirname(dbPath), { recursive: true });
   const previousUmask = process.umask(0o077);
   let database: Database;
@@ -25,6 +24,8 @@ function initializeDatabase(): Database {
   database.run("CREATE TABLE IF NOT EXISTS instances (id TEXT PRIMARY KEY, name TEXT NOT NULL, base_url TEXT NOT NULL, credential TEXT, status TEXT NOT NULL DEFAULT 'unknown', version TEXT, last_seen_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)");
   database.run("CREATE TABLE IF NOT EXISTS auth_users (id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, created_at TEXT NOT NULL)");
   database.run("CREATE TABLE IF NOT EXISTS auth_sessions (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE, expires_at INTEGER NOT NULL)");
+  database.run("CREATE TABLE IF NOT EXISTS auth_recovery_challenges (token_hash TEXT PRIMARY KEY, expires_at INTEGER NOT NULL)");
+  database.run("CREATE TABLE IF NOT EXISTS auth_recovery_attempts (ip_hash TEXT PRIMARY KEY, attempts INTEGER NOT NULL, window_started_at INTEGER NOT NULL, blocked_until INTEGER NOT NULL DEFAULT 0)");
   return database;
 }
 let database: Database | undefined;
@@ -36,6 +37,31 @@ const db = new Proxy({} as Database, {
   },
 });
 const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
+const recoveryWindowMs = 15 * 60 * 1000;
+function recoveryIpKey(req: Request): string {
+  const ip = req.headers.get("cf-connecting-ip") ?? "unknown";
+  return hashToken(ip);
+}
+function recoveryRateLimited(req: Request): boolean {
+  const key = recoveryIpKey(req), now = Date.now();
+  const row = db.query("SELECT attempts,window_started_at,blocked_until FROM auth_recovery_attempts WHERE ip_hash=?").get(key) as { attempts: number; window_started_at: number; blocked_until: number } | null;
+  if (row?.blocked_until && row.blocked_until > now) return true;
+  if (!row || now - row.window_started_at >= recoveryWindowMs) {
+    db.query("INSERT INTO auth_recovery_attempts (ip_hash,attempts,window_started_at,blocked_until) VALUES (?,0,?,0) ON CONFLICT(ip_hash) DO UPDATE SET attempts=0,window_started_at=excluded.window_started_at,blocked_until=0").run(key, now);
+    return false;
+  }
+  return row.attempts >= 5;
+}
+function recordRecoveryFailure(req: Request): void {
+  const key = recoveryIpKey(req), now = Date.now();
+  const row = db.query("SELECT attempts,window_started_at FROM auth_recovery_attempts WHERE ip_hash=?").get(key) as { attempts: number; window_started_at: number } | null;
+  const expired = !row || now - row.window_started_at >= recoveryWindowMs;
+  const attempts = expired ? 1 : row.attempts + 1;
+  db.query("INSERT INTO auth_recovery_attempts (ip_hash,attempts,window_started_at,blocked_until) VALUES (?,?,?,?) ON CONFLICT(ip_hash) DO UPDATE SET attempts=excluded.attempts,window_started_at=excluded.window_started_at,blocked_until=excluded.blocked_until").run(key, attempts, expired ? now : row.window_started_at, attempts >= 5 ? now + recoveryWindowMs : 0);
+}
+function recoveryTokenMatches(provided: string, configured: string): boolean {
+  return timingSafeEqual(createHash("sha256").update(provided).digest(), createHash("sha256").update(configured).digest());
+}
 const cookieName = "omp_control_session";
 function requestUsesHttps(req: Request): boolean {
   const origin = req.headers.get("origin");
@@ -327,6 +353,48 @@ export async function handleControlRequest(req: Request, server?: any): Promise<
       const token = randomUUID() + randomUUID();
       db.query("INSERT INTO auth_sessions (token_hash,user_id,expires_at) VALUES (?,?,?)").run(hashToken(token), user.id, Date.now() + 30 * 24 * 60 * 60 * 1000);
       return authSend({ authenticated: true, username: user.username }, sessionCookie(token, 30 * 24 * 60 * 60, requestUsesHttps(req)));
+    }
+    if (url.pathname === "/control/v1/auth/recovery/verify" && req.method === "POST") {
+      if (recoveryRateLimited(req)) return fail("RECOVERY_RATE_LIMITED", "Terlalu banyak percobaan. Coba lagi dalam 15 menit.", 429);
+      const configuredToken = process.env.OMP_ADMIN_RECOVERY_TOKEN ?? "";
+      if (configuredToken.length < 32) return fail("RECOVERY_UNAVAILABLE", "Pemulihan password belum dikonfigurasi dengan aman di server.", 503);
+      const body = await readJson(req);
+      const supplied = typeof body.token === "string" ? body.token : "";
+      if (!supplied || supplied.length > 4096 || !recoveryTokenMatches(supplied, configuredToken)) {
+        recordRecoveryFailure(req);
+        return fail("INVALID_RECOVERY_TOKEN", "Recovery token tidak valid.", 401);
+      }
+      const now = Date.now();
+      db.query("DELETE FROM auth_recovery_challenges WHERE expires_at <= ?").run(now);
+      const challenge = randomUUID() + randomUUID();
+      db.query("INSERT INTO auth_recovery_challenges (token_hash,expires_at) VALUES (?,?)").run(hashToken(challenge), now + 5 * 60 * 1000);
+      db.query("DELETE FROM auth_recovery_attempts WHERE ip_hash=?").run(recoveryIpKey(req));
+      return send({ verified: true, challenge, expiresIn: 300 });
+    }
+    if (url.pathname === "/control/v1/auth/recovery/reset" && req.method === "POST") {
+      const body = await readJson(req);
+      const challenge = typeof body.challenge === "string" ? body.challenge : "";
+      const password = typeof body.password === "string" ? body.password : "";
+      if (!challenge || challenge.length > 256) return fail("INVALID_RECOVERY_CHALLENGE", "Sesi pemulihan tidak valid atau sudah kedaluwarsa.", 401);
+      if (password.length < 8 || password.length > 1024) return fail("INVALID_PASSWORD", "Password harus terdiri dari 8–1024 karakter.");
+      const challengeHash = hashToken(challenge), now = Date.now();
+      const valid = db.query("SELECT token_hash FROM auth_recovery_challenges WHERE token_hash=? AND expires_at>?").get(challengeHash, now) as { token_hash: string } | null;
+      if (!valid) return fail("INVALID_RECOVERY_CHALLENGE", "Sesi pemulihan tidak valid atau sudah kedaluwarsa.", 401);
+      const user = db.query("SELECT id FROM auth_users ORDER BY created_at LIMIT 1").get() as { id: string } | null;
+      if (!user) return fail("NOT_CONFIGURED", "Akun administrator belum dibuat.", 409);
+      const newHash = await Bun.password.hash(password);
+      db.query("BEGIN IMMEDIATE").run();
+      try {
+        const consumed = db.query("DELETE FROM auth_recovery_challenges WHERE token_hash=? AND expires_at>?").run(challengeHash, now);
+        if (!consumed.changes) throw new Error("Recovery challenge has already been used");
+        db.query("UPDATE auth_users SET password_hash=? WHERE id=?").run(newHash, user.id);
+        db.query("DELETE FROM auth_sessions").run();
+        db.query("COMMIT").run();
+      } catch (error) {
+        db.query("ROLLBACK").run();
+        throw error;
+      }
+      return send({ reset: true, message: "Password berhasil diubah. Silakan masuk kembali." });
     }
     if (url.pathname === "/control/v1/auth/logout" && req.method === "POST") {
       const token = sessionToken(req);

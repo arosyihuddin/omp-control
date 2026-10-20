@@ -5,8 +5,9 @@ interface D1StatementLike {
   run(): Promise<{ meta: { changes: number } }>;
 }
 interface Env {
-  DB: { prepare(sql: string): D1StatementLike };
+  DB: { prepare(sql: string): D1StatementLike; batch<T = unknown>(statements: D1StatementLike[]): Promise<Array<{ meta: { changes: number }; results?: T[] }>> };
   ASSETS: { fetch(request: Request): Promise<Response> };
+  OMP_ADMIN_RECOVERY_TOKEN?: string;
 }
 type InstanceRow = {
   id: string;
@@ -38,6 +39,12 @@ const hex = (value: ArrayBuffer) =>
     .join("");
 const hash = async (value: string) =>
   hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)));
+async function recoveryTokenMatches(provided: string, configured: string): Promise<boolean> {
+  const a = await hash(provided), b = await hash(configured);
+  let diff = a.length ^ b.length;
+  for (let i = 0; i < Math.max(a.length, b.length); i++) diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
+  return diff === 0;
+}
 function tokenFrom(req: Request) {
   const part = (req.headers.get("cookie") ?? "")
     .split(";")
@@ -510,6 +517,42 @@ async function handle(req: Request, env: Env): Promise<Response> {
       return json({ authenticated: true, username: user.username }, 200, {
         "set-cookie": cookie(token, 2592000, req),
       });
+    }
+    if (path === "/control/v1/auth/recovery/verify" && req.method === "POST") {
+      const configured = env.OMP_ADMIN_RECOVERY_TOKEN ?? "";
+      if (configured.length < 32) return fail("RECOVERY_UNAVAILABLE", "Pemulihan password belum dikonfigurasi dengan aman di server.", 503);
+      const b = await body(req), supplied = typeof b.token === "string" ? b.token : "";
+      const ip = req.headers.get("cf-connecting-ip") ?? "unknown", ipHash = await hash(ip), timestamp = Date.now();
+      const attempt = await env.DB.prepare("SELECT attempts,window_started_at,blocked_until FROM auth_recovery_attempts WHERE ip_hash=?").bind(ipHash).first<{ attempts: number; window_started_at: number; blocked_until: number }>();
+      if (attempt?.blocked_until && attempt.blocked_until > timestamp) return fail("RECOVERY_RATE_LIMITED", "Terlalu banyak percobaan. Coba lagi dalam 15 menit.", 429);
+      const expiredWindow = !attempt || timestamp - attempt.window_started_at >= 900000;
+      if (!expiredWindow && attempt.attempts >= 5) return fail("RECOVERY_RATE_LIMITED", "Terlalu banyak percobaan. Coba lagi dalam 15 menit.", 429);
+      if (!supplied || supplied.length > 4096 || !(await recoveryTokenMatches(supplied, configured))) {
+        const attempts = expiredWindow ? 1 : attempt.attempts + 1;
+        await env.DB.prepare("INSERT INTO auth_recovery_attempts (ip_hash,attempts,window_started_at,blocked_until) VALUES (?,?,?,?) ON CONFLICT(ip_hash) DO UPDATE SET attempts=excluded.attempts,window_started_at=excluded.window_started_at,blocked_until=excluded.blocked_until").bind(ipHash, attempts, expiredWindow ? timestamp : attempt.window_started_at, attempts >= 5 ? timestamp + 900000 : 0).run();
+        return fail("INVALID_RECOVERY_TOKEN", "Recovery token tidak valid.", 401);
+      }
+      await env.DB.prepare("DELETE FROM auth_recovery_challenges WHERE expires_at<=?").bind(timestamp).run();
+      const challenge = uuid() + uuid();
+      await env.DB.prepare("INSERT INTO auth_recovery_challenges (token_hash,expires_at) VALUES (?,?)").bind(await hash(challenge), timestamp + 300000).run();
+      await env.DB.prepare("DELETE FROM auth_recovery_attempts WHERE ip_hash=?").bind(ipHash).run();
+      return json({ verified: true, challenge, expiresIn: 300 });
+    }
+    if (path === "/control/v1/auth/recovery/reset" && req.method === "POST") {
+      const b = await body(req), challenge = typeof b.challenge === "string" ? b.challenge : "", password = typeof b.password === "string" ? b.password : "";
+      if (!challenge || challenge.length > 256) return fail("INVALID_RECOVERY_CHALLENGE", "Sesi pemulihan tidak valid atau sudah kedaluwarsa.", 401);
+      if (password.length < 8 || password.length > 1024) return fail("INVALID_PASSWORD", "Password harus terdiri dari 8–1024 karakter.");
+      const challengeHash = await hash(challenge), timestamp = Date.now();
+      const user = await env.DB.prepare("SELECT id FROM auth_users ORDER BY created_at LIMIT 1").first<{ id: string }>();
+      if (!user) return fail("NOT_CONFIGURED", "Akun administrator belum dibuat.", 409);
+      const newHash = await passwordHash(password);
+      const results = await env.DB.batch([
+        env.DB.prepare("UPDATE auth_users SET password_hash=? WHERE id=? AND EXISTS (SELECT 1 FROM auth_recovery_challenges WHERE token_hash=? AND expires_at>?)").bind(newHash, user.id, challengeHash, timestamp),
+        env.DB.prepare("DELETE FROM auth_recovery_challenges WHERE token_hash=? AND expires_at>? AND EXISTS (SELECT 1 FROM auth_users WHERE id=? AND password_hash=?)").bind(challengeHash, timestamp, user.id, newHash),
+        env.DB.prepare("DELETE FROM auth_sessions WHERE EXISTS (SELECT 1 FROM auth_users WHERE id=? AND password_hash=?)").bind(user.id, newHash),
+      ]);
+      if (!results[0]?.meta.changes) return fail("INVALID_RECOVERY_CHALLENGE", "Sesi pemulihan tidak valid atau sudah kedaluwarsa.", 401);
+      return json({ reset: true, message: "Password berhasil diubah. Silakan masuk kembali." });
     }
     if (path === "/control/v1/auth/logout" && req.method === "POST") {
       const token = tokenFrom(req);

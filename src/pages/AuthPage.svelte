@@ -6,15 +6,21 @@
   }
 
   let { onAuthenticated }: Props = $props();
-  let mode = $state<'loading' | 'setup' | 'login' | 'error'>('loading');
+  let mode = $state<'loading' | 'setup' | 'login' | 'recovery-token' | 'recovery-password' | 'error'>('loading');
   let username = $state('');
   let password = $state('');
   let confirmPassword = $state('');
   let showPassword = $state(false);
+  let showRecoveryToken = $state(false);
+  let showRecoveryPassword = $state(false);
+  let showRecoveryConfirmPassword = $state(false);
   let showConfirmPassword = $state(false);
   let busy = $state(false);
   let usernameInput: HTMLInputElement | undefined = $state();
   let error = $state('');
+  let recoveryToken = $state('');
+  let recoveryChallenge = $state('');
+  let recoverySuccess = $state('');
 
   onMount(() => {
     void fetch('/control/v1/auth/status')
@@ -38,22 +44,48 @@
 
   async function submit(event: SubmitEvent) {
     event.preventDefault();
-    if (busy || (mode !== 'login' && mode !== 'setup')) return;
+    if (busy || !['login', 'setup', 'recovery-token', 'recovery-password'].includes(mode)) return;
     error = '';
-    if (mode === 'setup' && password !== confirmPassword) {
+    recoverySuccess = '';
+    if ((mode === 'setup' || mode === 'recovery-password') && password !== confirmPassword) {
       error = 'Konfirmasi password tidak cocok.';
       return;
     }
     busy = true;
     try {
-      const response = await fetch('/control/v1/auth/' + mode, {
+      let endpoint = '/control/v1/auth/' + mode;
+      let payload: Record<string, string> = { username, password };
+      if (mode === 'recovery-token') {
+        endpoint = '/control/v1/auth/recovery/verify';
+        payload = { token: recoveryToken };
+      } else if (mode === 'recovery-password') {
+        endpoint = '/control/v1/auth/recovery/reset';
+        payload = { challenge: recoveryChallenge, password };
+      }
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         credentials: 'same-origin',
-        body: JSON.stringify({ username, password })
+        body: JSON.stringify(payload)
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result?.error?.message ?? 'Autentikasi gagal.');
+      if (mode === 'recovery-token') {
+        recoveryChallenge = result.challenge;
+        recoveryToken = '';
+        password = '';
+        confirmPassword = '';
+        mode = 'recovery-password';
+        return;
+      }
+      if (mode === 'recovery-password') {
+        mode = 'login';
+        password = '';
+        confirmPassword = '';
+        recoveryChallenge = '';
+        recoverySuccess = 'Password berhasil diubah. Silakan masuk kembali.';
+        return;
+      }
       await onAuthenticated();
     } catch (reason) {
       error = reason instanceof Error ? reason.message : 'Terjadi kesalahan saat autentikasi.';
@@ -109,9 +141,9 @@
         </div>
 
         <div class="mb-8">
-          <h1 class="text-2xl font-semibold tracking-tight">{mode === 'setup' ? 'Buat akun administrator' : 'Selamat datang kembali'}</h1>
+          <h1 class="text-2xl font-semibold tracking-tight">{mode === 'setup' ? 'Buat akun administrator' : mode === 'recovery-token' ? 'Pemulihan password' : mode === 'recovery-password' ? 'Buat password baru' : 'Selamat datang kembali'}</h1>
           <p class="mt-2 text-sm leading-6 text-fg-subtle">
-            {mode === 'setup' ? 'Buat akun untuk mulai mengamankan workspace Anda.' : 'Masuk menggunakan akun administrator Anda.'}
+            {mode === 'setup' ? 'Buat akun untuk mulai mengamankan workspace Anda.' : mode === 'recovery-token' ? 'Masukkan recovery token yang dikonfigurasi di server.' : mode === 'recovery-password' ? 'Token terverifikasi. Tentukan password baru Anda.' : 'Masuk menggunakan akun administrator Anda.'}
           </p>
         </div>
 
@@ -122,7 +154,62 @@
             <p class="text-sm text-danger" role="alert">{error}</p>
             <button class="mt-4 w-full rounded-lg border border-line px-4 py-2.5 text-sm transition hover:bg-surface-hover" onclick={() => location.reload()}>Coba lagi</button>
           </div>
+        {:else if mode === 'recovery-token'}
+          <form onsubmit={submit} class="space-y-5">
+            <div>
+              <label class="mb-2 block text-sm font-medium" for="recovery-token">Recovery token</label>
+              <div class="auth-input flex items-center rounded-lg border border-line bg-surface transition focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/10">
+                <input id="recovery-token" bind:value={recoveryToken} required minlength="32" maxlength="4096" type={showRecoveryToken ? 'text' : 'password'} autocomplete="off" class="min-w-0 flex-1 rounded-none bg-transparent px-3.5 py-3 text-sm outline-none focus-visible:ring-0" placeholder="Masukkan recovery token" />
+                <button type="button" class="mr-1.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-fg-subtle transition hover:bg-surface-hover hover:text-fg" aria-label={showRecoveryToken ? 'Sembunyikan recovery token' : 'Tampilkan recovery token'} aria-pressed={showRecoveryToken} onclick={() => showRecoveryToken = !showRecoveryToken}>
+                  {#if showRecoveryToken}
+                    <svg viewBox="0 0 24 24" class="h-[18px] w-[18px]" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="M9.9 5.2A10.8 10.8 0 0 1 12 5c5 0 8.5 4.5 9.5 7a11.8 11.8 0 0 1-3.1 4.2"/><path d="M6.2 6.2A12.5 12.5 0 0 0 2.5 12c1 2.5 4.5 7 9.5 7a10.4 10.4 0 0 0 3.1-.5"/></svg>
+                  {:else}
+                    <svg viewBox="0 0 24 24" class="h-[18px] w-[18px]" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 12s3.5-7 9.5-7 9.5 7 9.5 7-3.5 7-9.5 7-9.5-7-9.5-7Z"/><circle cx="12" cy="12" r="2.5"/></svg>
+                  {/if}
+                </button>
+              </div>
+            </div>
+            {#if error}<p class="rounded-lg border border-danger/20 bg-danger/5 px-3 py-2.5 text-sm text-danger" role="alert">{error}</p>{/if}
+            <button type="submit" disabled={busy} class="w-full rounded-lg bg-accent px-4 py-3 text-sm font-medium text-white transition hover:bg-accent-hover disabled:cursor-wait disabled:opacity-55">{busy ? 'Memverifikasi…' : 'Verifikasi token'}</button>
+            <button type="button" class="w-full rounded-lg border border-line px-4 py-2.5 text-sm transition hover:bg-surface-hover" onclick={() => { mode = 'login'; error = ''; recoveryToken = ''; }}>Kembali ke login</button>
+          </form>
+        {:else if mode === 'recovery-password'}
+          <form onsubmit={submit} class="space-y-5">
+            <div>
+              <label class="mb-2 block text-sm font-medium" for="recovery-new-password">Password baru</label>
+              <div class="auth-input flex items-center rounded-lg border border-line bg-surface transition focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/10">
+                <input id="recovery-new-password" bind:value={password} required minlength="8" maxlength="1024" type={showRecoveryPassword ? 'text' : 'password'} autocomplete="new-password" class="min-w-0 flex-1 rounded-none bg-transparent px-3.5 py-3 text-sm outline-none focus-visible:ring-0" placeholder="Minimal 8 karakter" />
+                <button type="button" class="mr-1.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-fg-subtle transition hover:bg-surface-hover hover:text-fg" aria-label={showRecoveryPassword ? 'Sembunyikan password baru' : 'Tampilkan password baru'} aria-pressed={showRecoveryPassword} onclick={() => showRecoveryPassword = !showRecoveryPassword}>
+                  {#if showRecoveryPassword}
+                    <svg viewBox="0 0 24 24" class="h-[18px] w-[18px]" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="M9.9 5.2A10.8 10.8 0 0 1 12 5c5 0 8.5 4.5 9.5 7a11.8 11.8 0 0 1-3.1 4.2"/><path d="M6.2 6.2A12.5 12.5 0 0 0 2.5 12c1 2.5 4.5 7 9.5 7a10.4 10.4 0 0 0 3.1-.5"/></svg>
+                  {:else}
+                    <svg viewBox="0 0 24 24" class="h-[18px] w-[18px]" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 12s3.5-7 9.5-7 9.5 7 9.5 7-3.5 7-9.5 7-9.5-7-9.5-7Z"/><circle cx="12" cy="12" r="2.5"/></svg>
+                  {/if}
+                </button>
+              </div>
+            </div>
+            <div>
+              <label class="mb-2 block text-sm font-medium" for="recovery-confirm-password">Konfirmasi password</label>
+              <div class="auth-input flex items-center rounded-lg border border-line bg-surface transition focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/10">
+                <input id="recovery-confirm-password" bind:value={confirmPassword} required minlength="8" maxlength="1024" type={showRecoveryConfirmPassword ? 'text' : 'password'} autocomplete="new-password" class="min-w-0 flex-1 rounded-none bg-transparent px-3.5 py-3 text-sm outline-none focus-visible:ring-0" placeholder="Ulangi password baru" />
+                <button type="button" class="mr-1.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-fg-subtle transition hover:bg-surface-hover hover:text-fg" aria-label={showRecoveryConfirmPassword ? 'Sembunyikan konfirmasi password' : 'Tampilkan konfirmasi password'} aria-pressed={showRecoveryConfirmPassword} onclick={() => showRecoveryConfirmPassword = !showRecoveryConfirmPassword}>
+                  {#if showRecoveryConfirmPassword}
+                    <svg viewBox="0 0 24 24" class="h-[18px] w-[18px]" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="M9.9 5.2A10.8 10.8 0 0 1 12 5c5 0 8.5 4.5 9.5 7a11.8 11.8 0 0 1-3.1 4.2"/><path d="M6.2 6.2A12.5 12.5 0 0 0 2.5 12c1 2.5 4.5 7 9.5 7a10.4 10.4 0 0 0 3.1-.5"/></svg>
+                  {:else}
+                    <svg viewBox="0 0 24 24" class="h-[18px] w-[18px]" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 12s3.5-7 9.5-7 9.5 7 9.5 7-3.5 7-9.5 7-9.5-7-9.5-7Z"/><circle cx="12" cy="12" r="2.5"/></svg>
+                  {/if}
+                </button>
+              </div>
+              <p class="mt-2 text-xs text-fg-subtle">Sesi pemulihan berlaku selama 5 menit.</p>
+            </div>
+            {#if error}<p class="rounded-lg border border-danger/20 bg-danger/5 px-3 py-2.5 text-sm text-danger" role="alert">{error}</p>{/if}
+            <button type="submit" disabled={busy} class="w-full rounded-lg bg-accent px-4 py-3 text-sm font-medium text-white transition hover:bg-accent-hover disabled:cursor-wait disabled:opacity-55">{busy ? 'Mengubah password…' : 'Simpan password baru'}</button>
+            <button type="button" class="w-full rounded-lg border border-line px-4 py-2.5 text-sm transition hover:bg-surface-hover" onclick={() => { mode = 'login'; error = ''; recoveryChallenge = ''; password = ''; confirmPassword = ''; }}>Batalkan</button>
+          </form>
         {:else}
+          {#if recoverySuccess}
+            <p class="mb-4 rounded-lg border border-success/20 bg-success/5 px-3 py-2.5 text-sm text-success" role="status">{recoverySuccess}</p>
+          {/if}
           <form onsubmit={submit} class="space-y-5">
             <div>
               <label class="mb-2 block text-sm font-medium" for="auth-username">Username</label>
@@ -168,6 +255,9 @@
               {busy ? 'Memproses…' : mode === 'setup' ? 'Buat akun administrator' : 'Masuk'}
               {#if !busy}<svg viewBox="0 0 20 20" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10h12M10 4l6 6-6 6"/></svg>{/if}
             </button>
+            {#if mode === 'login'}
+              <button type="button" class="w-full text-sm text-fg-subtle transition hover:text-accent" onclick={() => { mode = 'recovery-token'; error = ''; recoverySuccess = ''; password = ''; confirmPassword = ''; }}>Lupa password?</button>
+            {/if}
           </form>
         {/if}
         <p class="mt-8 border-t border-line pt-5 text-center text-xs text-fg-faint">Secure administrator access</p>

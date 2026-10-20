@@ -41,7 +41,7 @@ The browser must not choose an arbitrary upstream URL or receive stored instance
 
 ### Self-hosted Bun
 
-The standalone SvelteKit/Bun server serves the UI and API from one listener. Instance registry and administrator/session data are stored in Bun SQLite; the default database path is `./data/omp-control.sqlite`, configurable through `OMP_CONTROL_DB_PATH`.
+The standalone SvelteKit/Bun server serves the UI and API from one listener. Instance registry and administrator/session data are stored in Bun SQLite at the fixed path `./data/omp-control.sqlite`.
 
 
 ## State ownership
