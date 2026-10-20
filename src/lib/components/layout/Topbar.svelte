@@ -1,5 +1,6 @@
 <script lang="ts">
   import ProfileCard from './ProfileCard.svelte';
+  import NotificationCenter from './NotificationCenter.svelte';
   import { ChevronRight } from '@lucide/svelte';
   import { router } from '$lib/stores/router.svelte';
 </script>
@@ -15,6 +16,7 @@
     </nav>
   </div>
   <div class="flex shrink-0 items-center gap-2">
+    <NotificationCenter />
     <ProfileCard compact placement="bottom" />
   </div>
 </header>

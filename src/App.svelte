@@ -21,6 +21,7 @@
   import TerminalPage from './pages/Terminal.svelte';
   import Tools from './pages/Tools.svelte';
   import Approvals from './pages/Approvals.svelte';
+  import GlobalApprovalNotifications from './features/approvals/GlobalApprovalNotifications.svelte';
   import ToastViewport from '$lib/components/ui/ToastViewport.svelte';
   import WorkspaceOverlays from './features/workspace/WorkspaceOverlays.svelte';
 
@@ -171,6 +172,9 @@
     <EditorView />
     {/if}
   </AppShell>
+{/if}
+{#if authenticated && instanceRegistry.active}
+  <GlobalApprovalNotifications />
 {/if}
 <ToastViewport />
 <WorkspaceOverlays />

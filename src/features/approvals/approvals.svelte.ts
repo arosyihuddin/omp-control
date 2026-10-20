@@ -1,5 +1,5 @@
 import { approvalsApi, errorMessage } from '$lib/api';
-import { onServerEvents } from '$lib/api/events';
+import { onServerConnection, onServerEvents } from '$lib/api/events';
 import type { Approval, ApprovalDecision } from '$lib/types';
 
 class ApprovalsStore {
@@ -29,6 +29,7 @@ class ApprovalsStore {
     try {
       const result = await approvalsApi.decide(id, decision) as { approval?: Approval };
       if (result.approval) this.upsert(result.approval);
+      else this.items = this.items.map((item) => item.id === id ? { ...item, status: decision === 'approve' ? 'approved' : 'denied', updatedAt: new Date().toISOString() } : item);
     } catch (error) {
       this.error = errorMessage(error, 'Unable to update approval');
     } finally {
@@ -73,9 +74,16 @@ class ApprovalsStore {
     }
   }
 
-  /** Apply realtime approval events directly to avoid redundant list requests. */
+  /** Keep approvals synchronized globally, including after SSE reconnects. */
   watch() {
-    return onServerEvents(['approval.created', 'approval.updated', 'approval.cleared'], (event) => this.handleEvent(event.type, event));
+    const stopEvents = onServerEvents(['approval.created', 'approval.updated', 'approval.cleared'], (event) => this.handleEvent(event.type, event));
+    const stopConnection = onServerConnection((connected) => {
+      if (connected) void this.load();
+    });
+    return () => {
+      stopEvents();
+      stopConnection();
+    };
   }
 }
 

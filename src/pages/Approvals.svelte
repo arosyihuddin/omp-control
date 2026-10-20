@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { ArrowLeft, CircleCheck, FileClock, Trash2 } from '@lucide/svelte';
   import { EmptyState, IconButton, Panel } from '$lib/components/ui';
   import { ApprovalCard, ApprovalHistory, ApprovalSkeleton, approvals } from '$features/approvals';
@@ -10,10 +9,6 @@
     if (await approvals.clearHistory()) showHistory = false;
   }
 
-  onMount(() => {
-    void approvals.load();
-    return approvals.watch();
-  });
 </script>
 
 <Panel

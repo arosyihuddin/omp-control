@@ -1,7 +1,7 @@
 <script lang="ts">
   import { ChevronDown, Folder, PanelLeft } from '@lucide/svelte';
   import { mainNav, routes, workspaceNav } from '$lib/routes';
-  import { dashboard } from '$lib/stores/dashboard.svelte';
+  import { approvals } from '$features/approvals/approvals.svelte';
   import { router } from '$lib/stores/router.svelte';
   import { ui } from '$lib/stores/ui.svelte';
   import SidebarItem from './SidebarItem.svelte';
@@ -58,7 +58,7 @@
         label={route.title}
         active={router.current === id}
         {collapsed}
-        badge={id === 'approvals' ? dashboard.pendingApprovals : 0}
+        badge={id === 'approvals' ? approvals.pending.length : 0}
         onclick={(event) => router.link(event, id)}
       />
     {/each}
