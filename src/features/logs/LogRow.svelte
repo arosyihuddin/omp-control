@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Badge, CodeBlock } from '$lib/components/ui';
+  import { LoaderCircle } from '@lucide/svelte';
   import type { BadgeTone } from '$lib/components/ui';
   import type { ToolCallLog } from '$lib/types';
   import { formatJson, formatTime } from '$lib/utils/format';
@@ -12,7 +13,7 @@
 
   let { log, expanded, ontoggle }: Props = $props();
 
-  const tone = $derived<BadgeTone>(log.status === 'success' ? 'success' : log.status === 'error' ? 'danger' : 'neutral');
+  const tone = $derived<BadgeTone>(log.status === 'success' ? 'success' : log.status === 'error' ? 'danger' : log.status === 'running' || log.status === 'waiting_approval' ? 'warning' : 'neutral');
 </script>
 
 <div class="transition-colors hover:bg-surface-hover/60">
@@ -25,7 +26,12 @@
     <span class="font-mono text-xs text-fg-faint">{formatTime(log.timestamp)}</span>
     <span class="min-w-0 truncate font-mono text-sm text-fg">{log.toolName}</span>
     <span class="hidden text-right font-mono text-xs text-fg-faint sm:block">{log.durationMs ?? '-'}ms</span>
-    <span class="justify-self-end"><Badge {tone} class="uppercase tracking-wide">{log.status}</Badge></span>
+    <span class="justify-self-end">
+      <Badge {tone} class="gap-1.5 uppercase tracking-wide">
+        {#if log.status === 'running'}<LoaderCircle size={12} class="animate-spin" aria-hidden="true" />{/if}
+        {log.status === 'waiting_approval' ? 'waiting approval' : log.status}
+      </Badge>
+    </span>
   </button>
 
   {#if expanded}

@@ -2,13 +2,14 @@
   import { onMount } from 'svelte';
   import { RefreshCw, ScrollText } from '@lucide/svelte';
   import { errorMessage, logsApi } from '$lib/api';
-  import { onServerEvent } from '$lib/api/events';
+  import { onServerEvents } from '$lib/api/events';
   import { EmptyState, IconButton, Panel, SearchInput, SegmentedControl, Skeleton } from '$lib/components/ui';
   import type { ToolCallLog } from '$lib/types';
   import { LogRow } from '$features/logs';
 
-  type StatusFilter = 'all' | 'success' | 'error';
-  const statusOptions = (['all', 'success', 'error'] as const).map((value) => ({ value, label: value }));
+  type StatusFilter = 'all' | 'waiting_approval' | 'running' | 'success' | 'error';
+  const statusOptions = (['all', 'waiting_approval', 'running', 'success', 'error'] as const).map((value) => ({ value, label: value === 'waiting_approval' ? 'waiting approval' : value }));
+  const liveLogUpdates = new Map<string, ToolCallLog>();
 
   let logs = $state<ToolCallLog[]>([]);
   let loading = $state(true);
@@ -59,8 +60,11 @@
     loading = true;
     error = '';
     try {
-      logs = await logsApi.list(limit);
-      hasMore = logs.length >= limit;
+      const fetched = await logsApi.list(limit);
+      const merged = new Map(fetched.map((log) => [log.id, log]));
+      for (const live of liveLogUpdates.values()) merged.set(live.id, live);
+      logs = [...merged.values()].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, limit);
+      hasMore = fetched.length >= limit;
     } catch (err) {
       error = errorMessage(err, 'Unable to load logs');
     } finally {
@@ -73,13 +77,16 @@
     loadingMore = true;
     const nextLimit = limit + 100;
     try {
-      const nextLogs = await logsApi.list(nextLimit);
+      const fetched = await logsApi.list(nextLimit);
+      const merged = new Map(fetched.map((log) => [log.id, log]));
+      for (const live of liveLogUpdates.values()) merged.set(live.id, live);
+      const nextLogs = [...merged.values()].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, nextLimit);
       if (nextLogs.length <= logs.length) {
         hasMore = false;
       } else {
         logs = nextLogs;
         limit = nextLimit;
-        hasMore = nextLogs.length >= nextLimit;
+        hasMore = fetched.length >= nextLimit;
       }
     } catch (err) {
       error = errorMessage(err, 'Unable to load more logs');
@@ -90,7 +97,23 @@
 
   onMount(() => {
     void load();
-    return onServerEvent('tool_call.created', () => void load());
+    return onServerEvents(['tool_call.created', 'tool_call.updated'], (event) => {
+      try {
+        const log = JSON.parse(event.data) as ToolCallLog;
+        if (!log?.id) return;
+        liveLogUpdates.set(log.id, log);
+        while (liveLogUpdates.size > limit * 2) {
+          const oldest = liveLogUpdates.keys().next().value;
+          if (oldest === undefined) break;
+          liveLogUpdates.delete(oldest);
+        }
+        const next = new Map(logs.map((item) => [item.id, item]));
+        next.set(log.id, log);
+        logs = [...next.values()].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, limit);
+      } catch {
+        // Ignore malformed live events; manual refresh can recover the persisted state.
+      }
+    });
   });
 
   $effect(() => {
