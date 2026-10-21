@@ -20,6 +20,7 @@
   onMount(() => {
     controller.attach({
       write: (data) => viewport?.write(data),
+      restore: (data) => viewport?.restore(data),
       reset: () => viewport?.reset(),
       focus: () => viewport?.focus(),
       refit: () => viewport?.refit(),

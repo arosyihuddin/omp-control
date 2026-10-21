@@ -8,6 +8,7 @@ export type SocketState = 'connecting' | 'connected' | 'closed';
 /** The imperative surface of TerminalViewport that the controller needs. */
 export interface TerminalViewHandle {
   write(data: string): void;
+  restore(data: string): void;
   reset(): void;
   focus(): void;
   refit(): void;
@@ -45,6 +46,10 @@ export class TerminalController {
   private readonly getWorkspaceRoot: () => string;
   private currentWorkspaceRoot = '';
   private loadGeneration = 0;
+  private reconnectTimer: number | undefined;
+  private heartbeatTimer: number | undefined;
+  private reconnectAttempts = 0;
+  private lastPongAt = 0;
 
   constructor(options: TerminalControllerOptions = {}) {
     this.scope = options.scope ?? 'general';
@@ -169,6 +174,10 @@ export class TerminalController {
   }
 
   private disconnect() {
+    clearTimeout(this.reconnectTimer);
+    clearInterval(this.heartbeatTimer);
+    this.reconnectTimer = undefined;
+    this.heartbeatTimer = undefined;
     const socket = this.socket;
     this.socket = null;
     socket?.close();
@@ -193,6 +202,16 @@ export class TerminalController {
     socket.onopen = () => {
       if (!current()) return;
       this.socketState = 'connected';
+      this.reconnectAttempts = 0;
+      this.lastPongAt = Date.now();
+      this.heartbeatTimer = window.setInterval(() => {
+        if (!current() || socket.readyState !== WebSocket.OPEN) return;
+        if (Date.now() - this.lastPongAt > 45_000) {
+          socket.close(4000, 'Terminal heartbeat timeout');
+          return;
+        }
+        socket.send(JSON.stringify({ type: 'ping', time: Date.now() }));
+      }, 15_000);
       settle();
     };
 
@@ -206,13 +225,15 @@ export class TerminalController {
       }
 
       switch (payload.type) {
+        case 'pong':
+          this.lastPongAt = Date.now();
+          break;
         case 'snapshot':
           if (payload.terminal) {
             const info = payload.terminal;
             this.terminals = this.terminals.map((item) => (item.id === id ? info : item));
           }
-          this.view?.reset();
-          if (payload.output) this.view?.write(payload.output);
+          this.view?.restore(payload.output ?? '');
           settle();
           break;
         case 'output':
@@ -230,14 +251,29 @@ export class TerminalController {
     };
 
     socket.onclose = () => {
-      if (current()) this.socketState = 'closed';
+      if (!current()) return;
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = undefined;
+      this.socketState = 'closed';
+      this.scheduleReconnect(id);
     };
 
     socket.onerror = () => {
       if (!current()) return;
       this.socketState = 'closed';
-      this.error = 'Terminal connection failed';
+      this.error = 'Terminal connection interrupted; reconnecting…';
+      socket.close();
     };
+  }
+
+  private scheduleReconnect(id: string) {
+    if (id !== this.activeId || this.reconnectTimer !== undefined) return;
+    const delay = Math.min(1000 * 2 ** this.reconnectAttempts, 15_000);
+    this.reconnectAttempts += 1;
+    this.reconnectTimer = window.setTimeout(() => {
+      this.reconnectTimer = undefined;
+      if (id === this.activeId && this.socketState === 'closed') this.connect(id);
+    }, delay);
   }
 }
 

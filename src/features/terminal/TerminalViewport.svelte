@@ -23,6 +23,7 @@
   let selectionPointerX = 0;
   let selectionPointerY = 0;
   let autoScrollFrame = 0;
+  let suppressReplayInput = false;
 
   function terminalCellAt(clientX: number, clientY: number) {
     if (!host || !term) return undefined;
@@ -120,6 +121,17 @@
   export function reset() {
     term?.reset();
   }
+  // Replaying saved PTY output reconstructs the screen. It may contain old
+  // terminal queries; responses generated while replaying must not be sent to
+  // the currently running shell, or they appear as literal input on reconnect.
+  export function restore(data: string) {
+    if (!term) return;
+    suppressReplayInput = true;
+    term.reset();
+    term.write(data, () => {
+      suppressReplayInput = false;
+    });
+  }
   export function focus() {
     term?.focus();
   }
@@ -153,12 +165,15 @@
     instance.loadAddon(fitAddon);
     instance.open(host!);
     instance.onData((data) => {
+      if (suppressReplayInput) return;
       // Ignore terminal color-query replies, including when xterm batches one
       // together with other input. They must never be typed into the shell.
       const filtered = data.replace(/\x1b\](?:10|11);rgb:[0-9a-f/]+(?:\x07|\x1b\\)/gi, '');
       if (filtered) ondata(filtered);
     });
-    instance.onBinary((data) => ondata(data));
+    instance.onBinary((data) => {
+      if (!suppressReplayInput) ondata(data);
+    });
     // Keep keyboard shortcuts inside the terminal; Ctrl+C still sends SIGINT.
     instance.attachCustomKeyEventHandler((event) => {
       if (event.key === 'Escape') event.preventDefault();

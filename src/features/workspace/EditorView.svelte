@@ -243,7 +243,7 @@
     }
   });
   onMount(() => {
-    terminalController.attach({ write: (data) => terminalViewport?.write(data), reset: () => terminalViewport?.reset(), focus: () => terminalViewport?.focus(), refit: () => terminalViewport?.refit() });
+    terminalController.attach({ write: (data) => terminalViewport?.write(data), restore: (data) => terminalViewport?.restore(data), reset: () => terminalViewport?.reset(), focus: () => terminalViewport?.focus(), refit: () => terminalViewport?.refit() });
     terminalInitPromise = terminalController.init();
     void terminalInitPromise;
     return () => terminalController.dispose();
